@@ -13,15 +13,20 @@
   "dependencies": {
     "@repo/shared-types": "*",
     "@repo/ui": "*",
+    "bcryptjs": "^3.0.3",
     "dotenv": "^16.0.3",
+    "jsonwebtoken": "^9.0.3",
     "mongoose": "^9.7.4",
     "next": "16.2.0",
     "react": "^19.2.0",
-    "react-dom": "^19.2.0"
+    "react-dom": "^19.2.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@repo/eslint-config": "*",
     "@repo/typescript-config": "*",
+    "@types/bcryptjs": "^2.4.6",
+    "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^22.15.3",
     "@types/react": "19.2.2",
     "@types/react-dom": "19.2.2",
