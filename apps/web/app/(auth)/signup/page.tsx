@@ -4,8 +4,21 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { useState } from "react";
+import { useSignUp } from "@/hooks/useSignup";
 
 export default function SignupPage() {
+
+    const [name, setName] = useState("")
+    const [email, setEmail] = useState("")
+    const [password, setPassword] = useState("")
+    const signUp = useSignUp()
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault()
+        signUp.mutate({ name, email, password })
+    }
+
     return (
         <div className="min-h-screen bg-[#0B1414] flex">
             {/* Left branding panel — desktop only */}
@@ -30,7 +43,7 @@ export default function SignupPage() {
             </div>
 
             {/* Right — login form */}
-            <div className="w-full lg:w-1/2 flex items-center justify-center p-6">
+            <form onSubmit={handleSubmit} className="w-full lg:w-1/2 flex items-center justify-center p-6">
                 <Card className="w-full max-w-sm bg-[#121D1C] border-[#1E2E2C] shadow-2xl">
                     <CardHeader className="space-y-1">
                         <CardTitle className="font-[family-name:var(--font-display)] text-2xl text-[#EAF6F2]">
@@ -43,6 +56,8 @@ export default function SignupPage() {
                             <Label htmlFor="name" className="text-[#EAF6F2]">Name</Label>
                             <Input
                                 id="name"
+                                value={name}
+                                onChange={(e) => setName(e.target.value)}
                                 type="text"
                                 placeholder="your name"
                                 className="bg-[#0B1414] border-[#1E2E2C] text-[#EAF6F2] placeholder:text-[#4A6660] focus-visible:ring-[#2DD4A7]"
@@ -52,6 +67,8 @@ export default function SignupPage() {
                             <Label htmlFor="email" className="text-[#EAF6F2]">Email</Label>
                             <Input
                                 id="email"
+                                value={email}
+                                onChange={(e) => setEmail(e.target.value)}
                                 type="email"
                                 placeholder="you@example.com"
                                 className="bg-[#0B1414] border-[#1E2E2C] text-[#EAF6F2] placeholder:text-[#4A6660] focus-visible:ring-[#2DD4A7]"
@@ -61,14 +78,21 @@ export default function SignupPage() {
                             <Label htmlFor="password" className="text-[#EAF6F2]">Password</Label>
                             <Input
                                 id="password"
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
                                 type="password"
                                 placeholder="••••••••"
                                 className="bg-[#0B1414] border-[#1E2E2C] text-[#EAF6F2] placeholder:text-[#4A6660] focus-visible:ring-[#2DD4A7]"
                             />
                         </div>
-                        <Button className="w-full bg-[#2DD4A7] text-[#0B1414] hover:bg-[#2DD4A7]/90 font-medium">
-                            Sign up
+                        <Button type="submit" disabled={signUp.isPending} className="w-full bg-[#2DD4A7] text-[#0B1414] hover:bg-[#2DD4A7]/90 font-medium">
+                            {signUp.isPending ? "Signing up..." : "Sign up"}
                         </Button>
+                        {signUp.isError && (
+                            <p className="text-sm text-red-400 text-center">
+                                {signUp.error.message}
+                            </p>
+                        )}
                         <p className="text-center text-sm text-[#7FA69B]">
                             Already have an account?{" "}
                             <a href="/login" className="text-[#2DD4A7] hover:underline">
@@ -77,7 +101,7 @@ export default function SignupPage() {
                         </p>
                     </CardContent>
                 </Card>
-            </div>
+            </form>
         </div>
     );
 }

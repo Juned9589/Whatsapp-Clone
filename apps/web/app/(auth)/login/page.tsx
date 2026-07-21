@@ -4,8 +4,21 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { useState } from "react";
+import { useLogin } from "@/hooks/useLogin";
+
 
 export default function LoginPage() {
+
+    const [email, setEmail] = useState("")
+    const [password, setPassword] = useState("")
+    const login = useLogin()
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault()
+        login.mutate({ email, password })
+    }
+
     return (
         <div className="min-h-screen bg-[#0B1414] flex">
             {/* Left branding panel — desktop only */}
@@ -39,34 +52,47 @@ export default function LoginPage() {
                         </CardTitle>
                         <p className="text-sm text-[#7FA69B]">Log in to keep the conversation going</p>
                     </CardHeader>
-                    <CardContent className="space-y-4">
-                        <div className="space-y-2">
-                            <Label htmlFor="email" className="text-[#EAF6F2]">Email</Label>
-                            <Input
-                                id="email"
-                                type="email"
-                                placeholder="you@example.com"
-                                className="bg-[#0B1414] border-[#1E2E2C] text-[#EAF6F2] placeholder:text-[#4A6660] focus-visible:ring-[#2DD4A7]"
-                            />
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="password" className="text-[#EAF6F2]">Password</Label>
-                            <Input
-                                id="password"
-                                type="password"
-                                placeholder="••••••••"
-                                className="bg-[#0B1414] border-[#1E2E2C] text-[#EAF6F2] placeholder:text-[#4A6660] focus-visible:ring-[#2DD4A7]"
-                            />
-                        </div>
-                        <Button className="w-full bg-[#2DD4A7] text-[#0B1414] hover:bg-[#2DD4A7]/90 font-medium">
-                            Log in
-                        </Button>
-                        <p className="text-center text-sm text-[#7FA69B]">
-                            Don&apos;t have an account?{" "}
-                            <a href="/signup" className="text-[#2DD4A7] hover:underline">
-                                Sign up
-                            </a>
-                        </p>
+                    <CardContent>
+                        <form onSubmit={handleSubmit} className="space-y-4">
+                            <div className="space-y-2">
+                                <Label htmlFor="email" className="text-[#EAF6F2]">Email</Label>
+                                <Input
+                                    id="email"
+                                    name="email"
+                                    value={email}
+                                    onChange={(e) => setEmail(e.target.value)}
+                                    type="email"
+                                    placeholder="you@example.com"
+                                    className="bg-[#0B1414] border-[#1E2E2C] text-[#EAF6F2] placeholder:text-[#4A6660] focus-visible:ring-[#2DD4A7]"
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="password" className="text-[#EAF6F2]">Password</Label>
+                                <Input
+                                    id="password"
+                                    name="password"
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
+                                    type="password"
+                                    placeholder="••••••••"
+                                    className="bg-[#0B1414] border-[#1E2E2C] text-[#EAF6F2] placeholder:text-[#4A6660] focus-visible:ring-[#2DD4A7]"
+                                />
+                            </div>
+                            <Button type="submit" disabled={login.isPending} className="w-full bg-[#2DD4A7] text-[#0B1414] hover:bg-[#2DD4A7]/90 font-medium">
+                                {login.isPending ? "Logging In" : "Log In"}
+                            </Button>
+                            {login.isError && (
+                                <p className="text-sm text-red-400 text-center">
+                                    {login.error.message}
+                                </p>
+                            )}
+                            <p className="text-center text-sm text-[#7FA69B]">
+                                Don&apos;t have an account?{" "}
+                                <a href="/signup" className="text-[#2DD4A7] hover:underline">
+                                    Sign up
+                                </a>
+                            </p>
+                        </form>
                     </CardContent>
                 </Card>
             </div>
