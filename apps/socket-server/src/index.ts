@@ -1,13 +1,16 @@
+import dotenv from "dotenv";
+dotenv.config();
 import express from "express";
 import cors from "cors";
-import dotenv from "dotenv";
 import http from "http";
 import Redis from "ioredis";
 import { Server as SocketServer } from "socket.io";
 import { createAdapter } from "@socket.io/redis-adapter";
 import jwt from "jsonwebtoken";
+import { connectDB, Message } from "@repo/database";
+import * as cookie from "cookie";
 
-dotenv.config();
+connectDB();
 
 const app = express();
 app.use(cors());
@@ -28,7 +31,8 @@ const io = new SocketServer(server, {
 });
 
 io.use((socket, next) => {
-  const token = socket.handshake.auth.token;
+  const cookies = cookie.parse(socket.handshake.headers.cookie || "");
+  const token = cookies.token;
 
   if (!token) {
     return next(new Error("Authentication error"));
@@ -45,6 +49,26 @@ io.use((socket, next) => {
 
 io.on("connection", (socket) => {
   console.log("New client connected:", socket.id);
+
+  socket.on("message:send", async (data) => {
+    try {
+      const message = await Message.create({
+        chatId: data.chatId,
+        sender: (socket as any).userId,
+        content: data.content,
+        type: data.type || "text",
+      });
+
+      io.to(data.chatId).emit("message:receive", message);
+    } catch (error) {
+      console.error("Message send error:", error);
+    }
+  });
+
+  socket.on("chat:join", (chatId: string) => {
+    socket.join(chatId);
+    console.log(`Socket ${socket.id} joined chat ${chatId}`);
+  });
 
   socket.on("disconnect", () => {
     console.log("Client disconnected:", socket.id);
