@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@repo/shared-types": "*",
+    "@repo/database": "*",
     "@repo/ui": "*",
     "@tanstack/react-query": "^5.101.2",
     "bcryptjs": "^3.0.3",

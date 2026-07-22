@@ -1,0 +1,21 @@
+{
+  "name": "@repo/database",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "./index.ts",
+  "types": "./index.ts",
+  "exports": {
+    ".": "./index.ts",
+    "./db": "./db.ts",
+    "./models/User": "./models/User.ts",
+    "./models/Chat": "./models/Chat.ts",
+    "./models/Message": "./models/Message.ts",
+    "./models/Status": "./models/Status.ts"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}
