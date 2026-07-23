@@ -48,6 +48,9 @@ io.use((socket, next) => {
 });
 
 io.on("connection", (socket) => {
+  const userId = (socket as any).userId;
+  redis.sadd("online_users", userId);
+  io.emit("user:online", { userId });
   console.log("New client connected:", socket.id);
 
   socket.on("message:send", async (data) => {
@@ -65,13 +68,67 @@ io.on("connection", (socket) => {
     }
   });
 
+  socket.on("message:delivered", async (messageId: string) => {
+    try {
+      const updated = await Message.findByIdAndUpdate(
+        messageId,
+        { status: "delivered" },
+        { new: true },
+      );
+      if (updated) {
+        io.to(updated.chatId.toString()).emit("message:status_update", updated);
+      }
+    } catch (error) {
+      console.error("Delivery update error:", error);
+    }
+  });
+
+  socket.on("chat:read", async (chatId: string) => {
+    try {
+      await Message.updateMany(
+        {
+          chatId,
+          status: { $ne: "read" },
+          sender: { $ne: (socket as any).userId },
+        },
+        { status: "read" },
+      );
+      io.to(chatId).emit("chat:read_update", {
+        chatId,
+        readBy: (socket as any).userId,
+      });
+    } catch (error) {
+      console.error("Read update error:", error);
+    }
+  });
+
   socket.on("chat:join", (chatId: string) => {
     socket.join(chatId);
     console.log(`Socket ${socket.id} joined chat ${chatId}`);
   });
 
-  socket.on("disconnect", () => {
+  socket.on("typing:start", (chatId: string) => {
+    socket
+      .to(chatId)
+      .emit("typing:start", { chatId, userId: (socket as any).userId });
+  });
+
+  socket.on("typing:stop", (chatId: string) => {
+    socket
+      .to(chatId)
+      .emit("typing:stop", { chatId, userId: (socket as any).userId });
+  });
+
+  socket.on("disconnect", async () => {
     console.log("Client disconnected:", socket.id);
+
+    const sockets = await io.fetchSockets();
+    const stillOnline = sockets.some((s: any) => s.userId === userId);
+
+    if (!stillOnline) {
+      await redis.srem("online_users", userId);
+      io.emit("user:offline", { userId });
+    }
   });
 });
 
