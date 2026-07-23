@@ -47,9 +47,11 @@ io.use((socket, next) => {
   }
 });
 
-io.on("connection", (socket) => {
+io.on("connection", async (socket) => {
   const userId = (socket as any).userId;
   redis.sadd("online_users", userId);
+  const onlineUsersList = await redis.smembers("online_users");
+  socket.emit("online_users:list", onlineUsersList);
   io.emit("user:online", { userId });
   console.log("New client connected:", socket.id);
 
