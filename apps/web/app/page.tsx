@@ -15,6 +15,7 @@ export default function Home() {
   const [messageText, setMessageText] = useState("");
   const [isOtherTyping, setIsOtherTyping] = useState(false);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [onlineUsers, setOnlineUsers] = useState<Set<string>>(new Set());
 
   const queryClient = useQueryClient();
 
@@ -59,6 +60,32 @@ export default function Home() {
     };
   }, [socketRef.current, selectedChat]);
 
+  useEffect(() => {
+    if (!socketRef.current) return;
+
+    socketRef.current.on("user:online", (data: any) => {
+      setOnlineUsers((prev) => new Set(prev).add(data.userId));
+    });
+    socketRef.current.on("online_users:list", (userIds: string[]) => {
+      setOnlineUsers(new Set(userIds));
+    });
+
+    socketRef.current.on("user:offline", (data: any) => {
+      console.log("User online event:", data);
+
+      setOnlineUsers((prev) => {
+        const updated = new Set(prev);
+        updated.delete(data.userId);
+        return updated;
+      });
+    });
+
+    return () => {
+      socketRef.current?.off("user:online");
+      socketRef.current?.off("user:offline");
+    };
+  }, [socketRef.current]);
+
   function handleSendMessage() {
     if (!messageText.trim() || !selectedChat) return;
     socketRef.current?.emit("message:send", {
@@ -102,10 +129,15 @@ export default function Home() {
         <div className="flex-1 flex flex-col">
           {/* Header — naam + typing indicator dono yahan grouped hain */}
           <div className="p-4 border-b border-[#1E2E2C] text-[#EAF6F2]">
-            <div>
+            <div className="flex items-center gap-2">
               {selectedChat.members.find(
                 (m: any) => m._id !== currentUserData?.userExist?._id
               )?.name}
+              {onlineUsers.has(
+                selectedChat.members.find(
+                  (m: any) => m._id !== currentUserData?.userExist?._id
+                )?._id
+              ) && <span className="w-2 h-2 rounded-full bg-[#2DD4A7]" />}
             </div>
             {isOtherTyping && (
               <div className="text-xs text-[#2DD4A7]">typing...</div>
