@@ -1,20 +1,20 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useChats } from "@/hooks/useChats";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useSocket } from "@/hooks/useSocket";
 import { useMessages } from "@/hooks/useMessages";
 import { useQueryClient } from "@tanstack/react-query";
 
-
-
 export default function Home() {
   const { data: chatsData, isLoading } = useChats();
   const { data: currentUserData } = useCurrentUser();
   const [selectedChat, setSelectedChat] = useState<any>(null);
-  const socketRef = useSocket()
-  const { data: messagesData } = useMessages(selectedChat?._id)
-  const [messageText, setMessageText] = useState("")
+  const socketRef = useSocket();
+  const { data: messagesData } = useMessages(selectedChat?._id);
+  const [messageText, setMessageText] = useState("");
+  const [isOtherTyping, setIsOtherTyping] = useState(false);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const queryClient = useQueryClient();
 
@@ -34,9 +34,30 @@ export default function Home() {
 
   useEffect(() => {
     if (selectedChat && socketRef.current) {
-      socketRef.current.emit("chat:join", selectedChat._id)
+      socketRef.current.emit("chat:join", selectedChat._id);
     }
-  }, [selectedChat])
+  }, [selectedChat]);
+
+  useEffect(() => {
+    if (!socketRef.current) return;
+
+    socketRef.current.on("typing:start", (data: any) => {
+      if (data.chatId === selectedChat?._id) {
+        setIsOtherTyping(true);
+      }
+    });
+
+    socketRef.current.on("typing:stop", (data: any) => {
+      if (data.chatId === selectedChat?._id) {
+        setIsOtherTyping(false);
+      }
+    });
+
+    return () => {
+      socketRef.current?.off("typing:start");
+      socketRef.current?.off("typing:stop");
+    };
+  }, [socketRef.current, selectedChat]);
 
   function handleSendMessage() {
     if (!messageText.trim() || !selectedChat) return;
@@ -44,7 +65,8 @@ export default function Home() {
       chatId: selectedChat._id,
       content: messageText,
     });
-    setMessageText("")
+    socketRef.current?.emit("typing:stop", selectedChat._id);
+    setMessageText("");
   }
 
   return (
@@ -78,11 +100,18 @@ export default function Home() {
       {/* Chat window area */}
       {selectedChat ? (
         <div className="flex-1 flex flex-col">
+          {/* Header — naam + typing indicator dono yahan grouped hain */}
           <div className="p-4 border-b border-[#1E2E2C] text-[#EAF6F2]">
-            {selectedChat.members.find(
-              (m: any) => m._id !== currentUserData?.userExist?._id
-            )?.name}
+            <div>
+              {selectedChat.members.find(
+                (m: any) => m._id !== currentUserData?.userExist?._id
+              )?.name}
+            </div>
+            {isOtherTyping && (
+              <div className="text-xs text-[#2DD4A7]">typing...</div>
+            )}
           </div>
+
           <div className="flex-1 overflow-y-auto p-4 space-y-2">
             {messagesData?.messages?.map((msg: any) => {
               const isOwnMessage = msg.sender === currentUserData?.userExist?._id;
@@ -107,7 +136,21 @@ export default function Home() {
           <div className="p-4 border-t border-[#1E2E2C] flex gap-2">
             <input
               value={messageText}
-              onChange={(e) => setMessageText(e.target.value)}
+              onChange={(e) => {
+                setMessageText(e.target.value);
+
+                if (selectedChat && socketRef.current) {
+                  socketRef.current.emit("typing:start", selectedChat._id);
+
+                  if (typingTimeoutRef.current) {
+                    clearTimeout(typingTimeoutRef.current);
+                  }
+
+                  typingTimeoutRef.current = setTimeout(() => {
+                    socketRef.current?.emit("typing:stop", selectedChat._id);
+                  }, 1500);
+                }
+              }}
               onKeyDown={(e) => e.key === "Enter" && handleSendMessage()}
               placeholder="Type a message..."
               className="flex-1 bg-[#121D1C] border border-[#1E2E2C] rounded-full px-4 py-2 text-[#EAF6F2] placeholder:text-[#4A6660] focus:outline-none focus:ring-2 focus:ring-[#2DD4A7]"
