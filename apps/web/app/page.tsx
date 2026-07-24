@@ -15,6 +15,7 @@ export default function Home() {
   const [messageText, setMessageText] = useState("");
   const [isOtherTyping, setIsOtherTyping] = useState(false);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [onlineUsers, setOnlineUsers] = useState<Set<string>>(new Set());
 
   const queryClient = useQueryClient();
@@ -85,6 +86,33 @@ export default function Home() {
       socketRef.current?.off("user:offline");
     };
   }, [socketRef.current]);
+
+  async function handleFileUpload(file: File) {
+    try {
+      const presignRes = await fetch("/api/upload/presign", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fileName: file.name, fileType: file.type }),
+      });
+      const { uploadUrl, key } = await presignRes.json();
+
+      await fetch(uploadUrl, {
+        method: "PUT",
+        headers: { "Content-Type": file.type },
+        body: file,
+      });
+
+      const fileType = file.type.startsWith("image/") ? "image" : "document";
+
+      socketRef.current?.emit("message:send", {
+        chatId: selectedChat._id,
+        content: key,
+        type: fileType,
+      });
+    } catch (error) {
+      console.error("File upload error:", error);
+    }
+  }
 
   function handleSendMessage() {
     if (!messageText.trim() || !selectedChat) return;
@@ -158,7 +186,15 @@ export default function Home() {
                       : "bg-[#121D1C] text-[#EAF6F2]"
                       }`}
                   >
-                    {msg.content}
+                    {msg.type === "image" ? (
+                      <img
+                        src={`https://${process.env.NEXT_PUBLIC_AWS_S3_BUCKET_NAME}.s3.${process.env.NEXT_PUBLIC_AWS_REGION}.amazonaws.com/${msg.content}`}
+                        alt="uploaded"
+                        className="rounded-lg max-w-full"
+                      />
+                    ) : (
+                      msg.content
+                    )}
                   </div>
                 </div>
               );
@@ -166,6 +202,24 @@ export default function Home() {
           </div>
 
           <div className="p-4 border-t border-[#1E2E2C] flex gap-2">
+
+            <input
+              type="file"
+              ref={fileInputRef}
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) handleFileUpload(file);
+              }}
+            />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="text-[#7FA69B] hover:text-[#2DD4A7] px-2"
+              type="button"
+            >
+              📎
+            </button>
+
             <input
               value={messageText}
               onChange={(e) => {
