@@ -5,6 +5,8 @@ import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useSocket } from "@/hooks/useSocket";
 import { useMessages } from "@/hooks/useMessages";
 import { useQueryClient } from "@tanstack/react-query";
+import { useUsers } from "@/hooks/useUsers";
+import { useCreateGroup } from "@/hooks/useCreateGroup";
 
 export default function Home() {
   const { data: chatsData, isLoading } = useChats();
@@ -14,6 +16,11 @@ export default function Home() {
   const { data: messagesData } = useMessages(selectedChat?._id);
   const [messageText, setMessageText] = useState("");
   const [isOtherTyping, setIsOtherTyping] = useState(false);
+  const [showGroupModal, setShowGroupModal] = useState(false);
+  const [groupName, setGroupName] = useState("");
+  const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
+  const { data: usersData } = useUsers();
+  const createGroup = useCreateGroup();
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [onlineUsers, setOnlineUsers] = useState<Set<string>>(new Set());
@@ -124,14 +131,34 @@ export default function Home() {
     setMessageText("");
   }
 
+  function handleCreateGroup() {
+    if (!groupName.trim() || selectedMembers.length === 0) return
+    createGroup.mutate(
+      { groupName, memberIds: selectedMembers },
+      {
+        onSuccess: () => {
+          setShowGroupModal(false)
+          setGroupName("")
+          setSelectedMembers([])
+          queryClient.invalidateQueries({ queryKey: ["chats"] })
+        }
+      }
+    )
+  }
   return (
     <div className="flex h-screen bg-[#0B1414]">
       {/* Sidebar */}
       <div className="w-full md:w-96 border-r border-[#1E2E2C] flex flex-col">
-        <div className="p-4 border-b border-[#1E2E2C]">
+        <div className="p-4 border-b border-[#1E2E2C] flex items-center justify-between">
           <h1 className="text-xl font-bold text-[#EAF6F2] font-[family-name:var(--font-display)]">
             Chats
           </h1>
+          <button
+            onClick={() => setShowGroupModal(true)}
+            className="text-[#2DD4A7] text-2xl"
+          >
+            +
+          </button>
         </div>
         <div className="flex-1 overflow-y-auto">
           {isLoading && <p className="text-[#7FA69B] p-4">Loading...</p>}
@@ -139,13 +166,14 @@ export default function Home() {
             const otherMember = chat.members.find(
               (m: any) => m._id !== currentUserData?.userExist?._id
             );
+            const displayName = chat.isGroup ? chat.groupName : otherMember?.name;
             return (
               <div
                 key={chat._id}
                 onClick={() => setSelectedChat(chat)}
                 className="p-4 border-b border-[#1E2E2C] hover:bg-[#121D1C] cursor-pointer text-[#EAF6F2]"
               >
-                {otherMember?.name || "Unknown"}
+                {displayName || "Unknown"}
               </div>
             );
           })}
@@ -158,14 +186,17 @@ export default function Home() {
           {/* Header — naam + typing indicator dono yahan grouped hain */}
           <div className="p-4 border-b border-[#1E2E2C] text-[#EAF6F2]">
             <div className="flex items-center gap-2">
-              {selectedChat.members.find(
-                (m: any) => m._id !== currentUserData?.userExist?._id
-              )?.name}
-              {onlineUsers.has(
-                selectedChat.members.find(
+              {selectedChat.isGroup
+                ? selectedChat.groupName
+                : selectedChat.members.find(
                   (m: any) => m._id !== currentUserData?.userExist?._id
-                )?._id
-              ) && <span className="w-2 h-2 rounded-full bg-[#2DD4A7]" />}
+                )?.name}
+              {!selectedChat.isGroup &&
+                onlineUsers.has(
+                  selectedChat.members.find(
+                    (m: any) => m._id !== currentUserData?.userExist?._id
+                  )?._id
+                ) && <span className="w-2 h-2 rounded-full bg-[#2DD4A7]" />}
             </div>
             {isOtherTyping && (
               <div className="text-xs text-[#2DD4A7]">typing...</div>
@@ -186,6 +217,11 @@ export default function Home() {
                       : "bg-[#121D1C] text-[#EAF6F2]"
                       }`}
                   >
+                    {selectedChat.isGroup && !isOwnMessage && (
+                      <div className="text-xs text-[#2DD4A7] mb-1">
+                        {selectedChat.members.find((m: any) => m._id === msg.sender)?.name}
+                      </div>
+                    )}
                     {msg.type === "image" ? (
                       <img
                         src={`https://${process.env.NEXT_PUBLIC_AWS_S3_BUCKET_NAME}.s3.${process.env.NEXT_PUBLIC_AWS_REGION}.amazonaws.com/${msg.content}`}
@@ -252,6 +288,51 @@ export default function Home() {
       ) : (
         <div className="hidden md:flex flex-1 items-center justify-center text-[#7FA69B]">
           Select a chat to start messaging
+        </div>
+      )}
+      {showGroupModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-[#121D1C] rounded-2xl p-6 w-full max-w-sm">
+            <h2 className="text-[#EAF6F2] text-lg font-bold mb-4">Create Group</h2>
+            <input
+              value={groupName}
+              onChange={(e) => setGroupName(e.target.value)}
+              placeholder="Group name"
+              className="w-full bg-[#0B1414] border border-[#1E2E2C] rounded-lg px-3 py-2 text-[#EAF6F2] mb-4"
+            />
+            <div className="max-h-48 overflow-y-auto space-y-2 mb-4">
+              {usersData?.users?.map((user: any) => (
+                <label key={user._id} className="flex items-center gap-2 text-[#EAF6F2]">
+                  <input
+                    type="checkbox"
+                    checked={selectedMembers.includes(user._id)}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setSelectedMembers((prev) => [...prev, user._id]);
+                      } else {
+                        setSelectedMembers((prev) => prev.filter((id) => id !== user._id));
+                      }
+                    }}
+                  />
+                  {user.name}
+                </label>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowGroupModal(false)}
+                className="flex-1 bg-[#1E2E2C] text-[#EAF6F2] py-2 rounded-lg"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreateGroup}
+                className="flex-1 bg-[#2DD4A7] text-[#0B1414] py-2 rounded-lg font-medium"
+              >
+                Create
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
