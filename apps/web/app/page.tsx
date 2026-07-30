@@ -11,6 +11,10 @@ import { useStatuses } from "@/hooks/useStatuses";
 import { useCreateStatus } from "@/hooks/useCreateStatus";
 import { useViewStatus } from "@/hooks/useViewStatus";
 import { formatDistanceToNow } from "date-fns";
+import { useWebRTC } from "@/hooks/useWebRTC";
+import IncomingCallModal from "@/components/call/IncomingCallModal";
+import CallScreen from "@/components/call/CallScreen";
+
 
 export default function Home() {
   const { data: chatsData, isLoading } = useChats();
@@ -33,8 +37,31 @@ export default function Home() {
   const viewStatus = useViewStatus();
   const [viewingStatus, setViewingStatus] = useState<any>(null);
   const statusFileInputRef = useRef<HTMLInputElement>(null);
-
   const queryClient = useQueryClient();
+
+  const {
+    startLocalStream,
+    createPeerConnection,
+    addLocalTracks,
+    createOffer,
+    createAnswer,
+    registerIceCandidateHandler,
+    registerTrackHandler,
+    setRemoteAnswer,
+    addIceCandidate,
+    localVideoRef,
+    remoteVideoRef,
+    closeConnection,
+    localStream,
+    remoteStream
+  } = useWebRTC();
+
+  const [incomingCall, setIncomingCall] = useState<{
+    from: string;
+    offer: RTCSessionDescriptionInit;
+  } | null>(null);
+
+  const [isInCall, setIsInCall] = useState(false);
 
   useEffect(() => {
     if (!socketRef.current) return;
@@ -49,6 +76,62 @@ export default function Home() {
       socketRef.current?.off("message:receive");
     };
   }, [socketRef.current]);
+
+  useEffect(() => {
+    if (!socketRef.current) return;
+
+    socketRef.current.on("CALL_OFFER", ({ from, offer }) => {
+      setIncomingCall({
+        from,
+        offer,
+      });
+    });
+
+    return () => {
+      socketRef.current?.off("CALL_OFFER");
+    };
+  }, [socketRef.current]);
+
+  useEffect(() => {
+    if (!socketRef.current) return;
+
+    socketRef.current.on("CALL_ANSWER", async ({ answer }) => {
+      await setRemoteAnswer(answer);
+    });
+
+    return () => {
+      socketRef.current?.off("CALL_ANSWER");
+    };
+  }, [socketRef.current, setRemoteAnswer]);
+
+  useEffect(() => {
+    if (!socketRef.current) return;
+
+    socketRef.current.on("ICE_CANDIDATE", async ({ candidate }) => {
+      try {
+        await addIceCandidate(candidate);
+      } catch (error) {
+        console.error("Failed to add ICE candidate:", error);
+      }
+    });
+
+    return () => {
+      socketRef.current?.off("ICE_CANDIDATE");
+    };
+  }, [socketRef.current, addIceCandidate]);
+
+  useEffect(() => {
+    if (!socketRef.current) return;
+
+    socketRef.current.on("CALL_END", () => {
+      closeConnection();
+      setIsInCall(false);
+    });
+
+    return () => {
+      socketRef.current?.off("CALL_END");
+    };
+  }, [socketRef.current, closeConnection]);
 
   useEffect(() => {
     if (selectedChat && socketRef.current) {
@@ -181,6 +264,105 @@ export default function Home() {
       console.error("Status upload error:", error);
     }
   }
+
+
+
+  async function handleStartCall() {
+
+    console.log("selectedChat:", selectedChat);
+    console.log("socket:", socketRef.current);
+    console.log("currentUser:", currentUserData);
+
+    if (!selectedChat) {
+      console.log("selectedChat is null");
+      return;
+    }
+
+    if (!socketRef.current) {
+      console.log("socket is null");
+      return;
+    }
+
+    const otherUser = selectedChat.members.find(
+      (m: any) => m._id !== currentUserData?.userExist?._id
+    );
+    console.log("otherUser:", otherUser)
+    if (!otherUser) return;
+
+    const stream = await startLocalStream();
+
+    createPeerConnection();
+
+    registerTrackHandler();
+
+    registerIceCandidateHandler((candidate) => {
+      socketRef.current?.emit("ICE_CANDIDATE", {
+        to: otherUser._id,
+        candidate,
+      });
+    });
+
+    addLocalTracks(stream);
+
+    const offer = await createOffer();
+
+    socketRef.current.emit("CALL_OFFER", {
+      to: otherUser._id,
+      offer,
+    });
+    setIsInCall(true);
+    console.log("Starting call...")
+  }
+
+  async function handleAcceptCall() {
+    if (!incomingCall || !socketRef.current) return;
+
+    try {
+      const stream = await startLocalStream();
+
+      createPeerConnection();
+
+      registerTrackHandler();
+
+      registerIceCandidateHandler((candidate) => {
+        socketRef.current?.emit("ICE_CANDIDATE", {
+          to: incomingCall.from,
+          candidate,
+        });
+      });
+
+      addLocalTracks(stream);
+
+      const answer = await createAnswer(incomingCall.offer);
+
+      socketRef.current.emit("CALL_ANSWER", {
+        to: incomingCall.from,
+        answer,
+      });
+
+      setIncomingCall(null);
+      setIsInCall(true);
+
+      console.log("Call accepted");
+    } catch (error) {
+      console.error("Accept call failed:", error);
+    }
+  }
+
+  function handleEndCall() {
+    const otherUser = selectedChat?.members.find(
+      (m: any) => m._id !== currentUserData?.userExist?._id
+    );
+
+    closeConnection();
+
+    socketRef.current?.emit("CALL_END", {
+      to: otherUser?._id,
+    });
+
+    setIsInCall(false);
+  }
+
   return (
     <div className="flex h-screen bg-[#0B1414]">
       {/* Sidebar */}
@@ -292,7 +474,7 @@ export default function Home() {
       {selectedChat ? (
         <div className="flex-1 flex flex-col">
           {/* Header — naam + typing indicator dono yahan grouped hain */}
-          <div className="p-4 border-b border-[#1E2E2C] text-[#EAF6F2]">
+          <div className="p-4 border-b border-[#1E2E2C] flex items-center justify-between text-[#EAF6F2]">
             <div className="flex items-center gap-2">
               {selectedChat.isGroup
                 ? selectedChat.groupName
@@ -309,6 +491,12 @@ export default function Home() {
             {isOtherTyping && (
               <div className="text-xs text-[#2DD4A7]">typing...</div>
             )}
+            <button
+              onClick={handleStartCall}
+              className="rounded-full bg-[#2DD4A7] px-4 py-2 text-black"
+            >
+              📞
+            </button>
           </div>
 
           <div className="flex-1 overflow-y-auto p-4 space-y-2">
@@ -473,7 +661,26 @@ export default function Home() {
           </div>
         </div>
       )}
+      {incomingCall && (
+        <IncomingCallModal
+          callerName={incomingCall.from}
+          onAccept={handleAcceptCall}
+          onReject={() => {
+            setIncomingCall(null);
 
+          }}
+        />
+      )}
+
+      {isInCall && (
+        <CallScreen
+          localVideoRef={localVideoRef}
+          remoteVideoRef={remoteVideoRef}
+          localStream={localStream}
+          remoteStream={remoteStream}
+          onEndCall={handleEndCall}
+        />
+      )}
     </div>
   );
 }

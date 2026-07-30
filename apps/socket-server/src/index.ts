@@ -9,6 +9,7 @@ import { createAdapter } from "@socket.io/redis-adapter";
 import jwt from "jsonwebtoken";
 import { connectDB, Message } from "@repo/database";
 import * as cookie from "cookie";
+import { registerCallHandlers } from "./socket/callHandlers";
 
 connectDB();
 
@@ -49,6 +50,8 @@ io.use((socket, next) => {
 
 io.on("connection", async (socket) => {
   const userId = (socket as any).userId;
+  socket.join(userId);
+  registerCallHandlers(io, socket, userId);
   redis.sadd("online_users", userId);
   const onlineUsersList = await redis.smembers("online_users");
   socket.emit("online_users:list", onlineUsersList);
