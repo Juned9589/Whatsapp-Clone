@@ -7,6 +7,10 @@ import { useMessages } from "@/hooks/useMessages";
 import { useQueryClient } from "@tanstack/react-query";
 import { useUsers } from "@/hooks/useUsers";
 import { useCreateGroup } from "@/hooks/useCreateGroup";
+import { useStatuses } from "@/hooks/useStatuses";
+import { useCreateStatus } from "@/hooks/useCreateStatus";
+import { useViewStatus } from "@/hooks/useViewStatus";
+import { formatDistanceToNow } from "date-fns";
 
 export default function Home() {
   const { data: chatsData, isLoading } = useChats();
@@ -24,6 +28,11 @@ export default function Home() {
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [onlineUsers, setOnlineUsers] = useState<Set<string>>(new Set());
+  const { data: statusesData } = useStatuses();
+  const createStatus = useCreateStatus();
+  const viewStatus = useViewStatus();
+  const [viewingStatus, setViewingStatus] = useState<any>(null);
+  const statusFileInputRef = useRef<HTMLInputElement>(null);
 
   const queryClient = useQueryClient();
 
@@ -145,6 +154,33 @@ export default function Home() {
       }
     )
   }
+  async function handleStatusUpload(file: File) {
+    try {
+      const presignRes = await fetch("/api/upload/presign", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fileName: file.name, fileType: file.type }),
+      });
+      const { uploadUrl, key } = await presignRes.json();
+
+      await fetch(uploadUrl, {
+        method: "PUT",
+        headers: { "Content-Type": file.type },
+        body: file,
+      });
+
+      createStatus.mutate(
+        { mediaUrl: key },
+        {
+          onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["statuses"] });
+          },
+        }
+      );
+    } catch (error) {
+      console.error("Status upload error:", error);
+    }
+  }
   return (
     <div className="flex h-screen bg-[#0B1414]">
       {/* Sidebar */}
@@ -159,6 +195,78 @@ export default function Home() {
           >
             +
           </button>
+        </div>
+        <div className="border-b border-[#1E2E2C] p-4">
+          <h2 className="mb-3 text-sm font-semibold text-[#7FA69B]">
+            Status
+          </h2>
+
+          {/* My Status */}
+
+          <button
+            onClick={() => statusFileInputRef.current?.click()}
+            className="mb-3 flex w-full items-center gap-3 rounded-lg p-2 hover:bg-[#121D1C]"
+          >
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#2DD4A7] text-black">
+              +
+            </div>
+
+            <div className="text-left">
+              <p className="text-[#EAF6F2]">
+                My Status
+              </p>
+
+              <p className="text-xs text-[#7FA69B]">
+                Add a status
+              </p>
+            </div>
+          </button>
+
+          <input
+            ref={statusFileInputRef}
+            type="file"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+
+              if (file) {
+                handleStatusUpload(file);
+              }
+            }}
+          />
+        </div>
+        <div className="mt-4">
+          <p className="text-xs text-[#7FA69B] mb-2 uppercase">
+            Recent Updates
+          </p>
+
+          <div className="space-y-2">
+            {statusesData?.statuses?.map((status: any) => (
+              <button
+                key={status._id}
+                onClick={() => {
+                  setViewingStatus(status);
+                  viewStatus.mutate(status._id);
+                }}
+                className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-[#121D1C]"
+              >
+                <div className="w-12 h-12 rounded-full bg-[#2DD4A7] flex items-center justify-center text-black font-bold">
+                  {status.userId.name.charAt(0).toUpperCase()}
+                </div>
+                <div className="text-left">
+                  <p className="text-[#EAF6F2] font-medium">
+                    {status.userId.name}
+                  </p>
+
+                  <p className="text-xs text-[#7FA69B]">
+                    {formatDistanceToNow(new Date(status.createdAt), {
+                      addSuffix: true,
+                    })}
+                  </p>
+                </div>
+              </button>
+            ))}
+          </div>
         </div>
         <div className="flex-1 overflow-y-auto">
           {isLoading && <p className="text-[#7FA69B] p-4">Loading...</p>}
@@ -333,8 +441,39 @@ export default function Home() {
               </button>
             </div>
           </div>
+
+        </div>
+
+      )}
+      {viewingStatus && (
+        <div
+          className="fixed inset-0 bg-black flex items-center justify-center z-50"
+          onClick={() => setViewingStatus(null)}
+        >
+          <div className="max-w-md w-full mx-4">
+            <div className="flex items-center gap-3 mb-4 px-2">
+              <div className="w-10 h-10 rounded-full bg-[#2DD4A7] flex items-center justify-center text-black font-bold">
+                {viewingStatus.userId.name.charAt(0).toUpperCase()}
+              </div>
+              <div>
+                <p className="text-[#EAF6F2] font-medium">{viewingStatus.userId.name}</p>
+                <p className="text-xs text-[#7FA69B]">
+                  {formatDistanceToNow(new Date(viewingStatus.createdAt), { addSuffix: true })}
+                </p>
+              </div>
+            </div>
+            <img
+              src={`https://${process.env.NEXT_PUBLIC_AWS_S3_BUCKET_NAME}.s3.${process.env.NEXT_PUBLIC_AWS_REGION}.amazonaws.com/${viewingStatus.mediaUrl}`}
+              alt="status"
+              className="w-full rounded-lg"
+            />
+            {viewingStatus.caption && (
+              <p className="text-[#EAF6F2] text-center mt-3">{viewingStatus.caption}</p>
+            )}
+          </div>
         </div>
       )}
+
     </div>
   );
 }
