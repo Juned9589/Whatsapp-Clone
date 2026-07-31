@@ -14,6 +14,7 @@ import { formatDistanceToNow } from "date-fns";
 import { useWebRTC } from "@/hooks/useWebRTC";
 import IncomingCallModal from "@/components/call/IncomingCallModal";
 import CallScreen from "@/components/call/CallScreen";
+import { useCallAudio } from "@/hooks/useCallAudio";
 
 
 export default function Home() {
@@ -51,17 +52,34 @@ export default function Home() {
     addIceCandidate,
     localVideoRef,
     remoteVideoRef,
-    closeConnection,
     localStream,
-    remoteStream
+    remoteStream,
+    isMicEnabled,
+    isCameraEnabled,
+    toggleMicrophone,
+    toggleCamera,
+    closeConnection,
   } = useWebRTC();
+
+  const {
+    playIncoming,
+    stopIncoming,
+    playOutgoing,
+    stopOutgoing
+  } = useCallAudio()
 
   const [incomingCall, setIncomingCall] = useState<{
     from: string;
     offer: RTCSessionDescriptionInit;
+    caller: {
+      id: string
+      name: string
+      image?: string
+    }
   } | null>(null);
 
   const [isInCall, setIsInCall] = useState(false);
+  const [callStartTime, setCallStartTime] = useState<number | null>(null);
 
   useEffect(() => {
     if (!socketRef.current) return;
@@ -80,10 +98,12 @@ export default function Home() {
   useEffect(() => {
     if (!socketRef.current) return;
 
-    socketRef.current.on("CALL_OFFER", ({ from, offer }) => {
+    socketRef.current?.on("CALL_OFFER", ({ from, offer, caller }) => {
+      playIncoming()
       setIncomingCall({
         from,
         offer,
+        caller,
       });
     });
 
@@ -96,6 +116,7 @@ export default function Home() {
     if (!socketRef.current) return;
 
     socketRef.current.on("CALL_ANSWER", async ({ answer }) => {
+      stopOutgoing()
       await setRemoteAnswer(answer);
     });
 
@@ -124,12 +145,34 @@ export default function Home() {
     if (!socketRef.current) return;
 
     socketRef.current.on("CALL_END", () => {
+      stopIncoming();
+      stopOutgoing();
+
       closeConnection();
+
+      setIncomingCall(null);
+      setCallStartTime(null);
       setIsInCall(false);
+    });
+
+    socketRef.current.on("CALL_REJECT", () => {
+      console.log("CALL_REJECT received");
+
+      stopIncoming();
+      stopOutgoing();
+
+      closeConnection();
+
+      setIncomingCall(null);
+      setCallStartTime(null);
+      setIsInCall(false);
+
+      alert("Call Rejected");
     });
 
     return () => {
       socketRef.current?.off("CALL_END");
+      socketRef.current?.off("CALL_REJECT");
     };
   }, [socketRef.current, closeConnection]);
 
@@ -269,9 +312,7 @@ export default function Home() {
 
   async function handleStartCall() {
 
-    console.log("selectedChat:", selectedChat);
-    console.log("socket:", socketRef.current);
-    console.log("currentUser:", currentUserData);
+
 
     if (!selectedChat) {
       console.log("selectedChat is null");
@@ -288,7 +329,7 @@ export default function Home() {
     );
     console.log("otherUser:", otherUser)
     if (!otherUser) return;
-
+    playOutgoing();
     const stream = await startLocalStream();
 
     createPeerConnection();
@@ -309,12 +350,19 @@ export default function Home() {
     socketRef.current.emit("CALL_OFFER", {
       to: otherUser._id,
       offer,
+      caller: {
+        id: currentUserData?.userExist?._id,
+        name: currentUserData?.userExist?.name,
+        image: currentUserData?.userExist?.avatar  // ya avatar/profileImage jo bhi field ho
+      },
     });
+
     setIsInCall(true);
-    console.log("Starting call...")
+    setCallStartTime(Date.now())
   }
 
   async function handleAcceptCall() {
+    stopIncoming()
     if (!incomingCall || !socketRef.current) return;
 
     try {
@@ -342,6 +390,7 @@ export default function Home() {
 
       setIncomingCall(null);
       setIsInCall(true);
+      setCallStartTime(Date.now())
 
       console.log("Call accepted");
     } catch (error) {
@@ -349,10 +398,42 @@ export default function Home() {
     }
   }
 
-  function handleEndCall() {
+  async function handleRejectCall() {
+    if (!incomingCall) return;
+
+    stopIncoming();
+
+    socketRef.current?.emit("CALL_REJECT", {
+      to: incomingCall.from,
+    });
+
+    try {
+      await fetch("/api/calls", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          receiverId: incomingCall.from,
+          duration: 0,
+          status: "rejected",
+          type: "video",
+        }),
+      });
+    } catch (error) {
+      console.error(error);
+    }
+
+    setIncomingCall(null);
+  }
+
+  async function handleEndCall() {
     const otherUser = selectedChat?.members.find(
       (m: any) => m._id !== currentUserData?.userExist?._id
     );
+
+    stopIncoming();
+    stopOutgoing();
 
     closeConnection();
 
@@ -360,8 +441,53 @@ export default function Home() {
       to: otherUser?._id,
     });
 
-    setIsInCall(false);
+    const duration = callStartTime
+      ? Math.floor((Date.now() - callStartTime) / 1000)
+      : 0;
+
+    if (otherUser?._id) {
+      try {
+        await fetch("/api/calls", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            receiverId: otherUser._id,
+            duration: duration, // Abhi 0, baad me actual timer save karenge
+            status: "answered",
+            type: "video",
+          }),
+        });
+      } catch (error) {
+        console.error("Failed to save call:", error);
+      } finally {
+        setCallStartTime(null)
+        setIsInCall(false)
+      }
+    }
+
   }
+
+  // function handleCallAgain(
+  //   userId: string,
+  //   type: "audio" | "video"
+  // ) {
+  //   const chat = chatsData?.chats?.find((chat: any) =>
+  //     chat.members.some((member: any) => member._id === userId)
+  //   );
+
+  //   if (!chat) return;
+
+  //   setSelectedChat(chat);
+
+  //   if (type === "video") {
+  //     handleStartCall(userId);
+  //   } else {
+  //     // Future: Audio call
+  //     console.log("Audio call");
+  //   }
+  // }
 
   return (
     <div className="flex h-screen bg-[#0B1414]">
@@ -663,12 +789,9 @@ export default function Home() {
       )}
       {incomingCall && (
         <IncomingCallModal
-          callerName={incomingCall.from}
+          callerName={incomingCall?.caller?.name}
           onAccept={handleAcceptCall}
-          onReject={() => {
-            setIncomingCall(null);
-
-          }}
+          onReject={handleRejectCall}
         />
       )}
 
@@ -679,6 +802,10 @@ export default function Home() {
           localStream={localStream}
           remoteStream={remoteStream}
           onEndCall={handleEndCall}
+          toggleMicrophone={toggleMicrophone}
+          toggleCamera={toggleCamera}
+          isMicEnabled={isMicEnabled}
+          isCameraEnabled={isCameraEnabled}
         />
       )}
     </div>

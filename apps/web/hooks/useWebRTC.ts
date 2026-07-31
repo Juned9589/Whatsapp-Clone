@@ -172,6 +172,8 @@ export function useWebRTC() {
     remoteVideoRef,
     localStream,
     remoteStream,
+    isMicEnabled,
+    isCameraEnabled,
     startLocalStream,
     addLocalTracks,
     createOffer,

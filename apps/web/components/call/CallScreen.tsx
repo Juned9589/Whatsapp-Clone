@@ -8,6 +8,10 @@ interface CallScreenProps {
     localStream: MediaStream | null
     remoteStream: MediaStream | null
     onEndCall: () => void;
+    toggleMicrophone: () => void;
+    toggleCamera: () => void;
+    isMicEnabled: boolean;
+    isCameraEnabled: boolean
 }
 
 export default function CallScreen({
@@ -16,6 +20,10 @@ export default function CallScreen({
     localStream,
     remoteStream,
     onEndCall,
+    toggleMicrophone,
+    toggleCamera,
+    isMicEnabled,
+    isCameraEnabled
 }: CallScreenProps) {
     const [duration, setDuration] = useState(0);
 
@@ -53,7 +61,7 @@ export default function CallScreen({
                 autoPlay
                 playsInline
                 muted
-                controls
+
                 className="h-full w-full object-cover"
             />
 
@@ -63,7 +71,7 @@ export default function CallScreen({
                 autoPlay
                 muted
                 playsInline
-                controls
+
                 className="absolute bottom-6 right-6 h-48 w-36 rounded-xl border-2 border-white object-cover"
             />
 
@@ -77,12 +85,28 @@ export default function CallScreen({
             </div>
 
             {/* End Call Button */}
-            <button
-                onClick={onEndCall}
-                className="absolute bottom-8 left-1/2 -translate-x-1/2 rounded-full bg-red-600 px-6 py-3 text-white hover:bg-red-700"
-            >
-                End Call
-            </button>
+            <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex items-center gap-4">
+                <button
+                    onClick={toggleMicrophone}
+                    className="rounded-full bg-gray-800 px-5 py-4 text-white"
+                >
+                    {isMicEnabled ? "🎤" : "🔇"}
+                </button>
+
+                <button
+                    onClick={onEndCall}
+                    className="rounded-full bg-red-600 px-6 py-4 text-white"
+                >
+                    📞
+                </button>
+
+                <button
+                    onClick={toggleCamera}
+                    className="rounded-full bg-gray-800 px-5 py-4 text-white"
+                >
+                    {isCameraEnabled ? "📹" : "🚫📹"}
+                </button>
+            </div>
         </div>
     );
 }
