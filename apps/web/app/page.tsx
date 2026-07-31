@@ -80,6 +80,7 @@ export default function Home() {
 
   const [isInCall, setIsInCall] = useState(false);
   const [callStartTime, setCallStartTime] = useState<number | null>(null);
+  const callTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (!socketRef.current) return;
@@ -327,9 +328,6 @@ export default function Home() {
 
 
   async function handleStartCall() {
-
-
-
     if (!selectedChat) {
       console.log("selectedChat is null");
       return;
@@ -375,6 +373,10 @@ export default function Home() {
 
     setIsInCall(true);
     setCallStartTime(Date.now())
+
+    callTimeoutRef.current = setTimeout(() => {
+      handleNoAnswer(otherUser._id);
+    }, 30000);
   }
 
   async function handleAcceptCall() {
@@ -404,6 +406,11 @@ export default function Home() {
         answer,
       });
 
+      if (callTimeoutRef.current) {
+        clearTimeout(callTimeoutRef.current);
+        callTimeoutRef.current = null;
+      }
+
       setIncomingCall(null);
       setIsInCall(true);
       setCallStartTime(Date.now())
@@ -418,6 +425,11 @@ export default function Home() {
     if (!incomingCall) return;
 
     stopIncoming();
+
+    if (callTimeoutRef.current) {
+      clearTimeout(callTimeoutRef.current);
+      callTimeoutRef.current = null;
+    }
 
     socketRef.current?.emit("CALL_REJECT", {
       to: incomingCall.from,
@@ -443,7 +455,50 @@ export default function Home() {
     setIncomingCall(null);
   }
 
+  async function handleNoAnswer(receiverId: string) {
+    stopOutgoing();
+
+    closeConnection();
+
+    socketRef.current?.emit("CALL_END", {
+      to: receiverId,
+    });
+
+    try {
+      await fetch("/api/calls", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          receiverId,
+          duration: 0,
+          status: "missed",
+          type: "video",
+        }),
+      });
+    } catch (error) {
+      console.error("Failed to save missed call:", error);
+    } finally {
+      setCallStartTime(null);
+      setIsInCall(false);
+
+      if (callTimeoutRef.current) {
+        clearTimeout(callTimeoutRef.current);
+        callTimeoutRef.current = null;
+      }
+
+      alert("No Answer");
+    }
+  }
+
   async function handleEndCall() {
+
+    if (callTimeoutRef.current) {
+      clearTimeout(callTimeoutRef.current);
+      callTimeoutRef.current = null;
+    }
+
     const otherUser = selectedChat?.members.find(
       (m: any) => m._id !== currentUserData?.userExist?._id
     );
