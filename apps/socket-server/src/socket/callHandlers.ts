@@ -1,5 +1,7 @@
 import { Server, Socket } from "socket.io";
 
+const activeCalls = new Set<string>();
+
 export function registerCallHandlers(
   io: Server,
   socket: Socket,
@@ -7,6 +9,15 @@ export function registerCallHandlers(
 ) {
   socket.on("CALL_OFFER", ({ to, offer, caller }) => {
     console.log(`Call offer from ${userId} to ${to}`);
+
+    // Busy check
+    if (activeCalls.has(to)) {
+      socket.emit("CALL_BUSY", {
+        userId: to,
+      });
+
+      return;
+    }
 
     io.to(to).emit("CALL_OFFER", {
       from: userId,
@@ -17,6 +28,9 @@ export function registerCallHandlers(
 
   socket.on("CALL_ANSWER", ({ to, answer }) => {
     console.log(`CALL answered by ${userId}`);
+
+    activeCalls.add(userId);
+    activeCalls.add(to);
 
     io.to(to).emit("CALL_ANSWER", {
       from: userId,
@@ -33,6 +47,9 @@ export function registerCallHandlers(
 
   socket.on("CALL_END", ({ to }) => {
     console.log(`Call ended by ${userId}`);
+
+    activeCalls.delete(userId);
+    activeCalls.delete(to);
 
     io.to(to).emit("CALL_END", {
       from: userId,

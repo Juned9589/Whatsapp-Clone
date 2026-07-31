@@ -170,9 +170,25 @@ export default function Home() {
       alert("Call Rejected");
     });
 
+    socketRef.current.on("CALL_BUSY", () => {
+      console.log("CALL_BUSY received");
+
+      stopOutgoing();
+      stopIncoming();
+
+      closeConnection();
+
+      setIncomingCall(null);
+      setCallStartTime(null);
+      setIsInCall(false);
+
+      alert("User is busy");
+    });
+
     return () => {
       socketRef.current?.off("CALL_END");
       socketRef.current?.off("CALL_REJECT");
+      socketRef.current?.off("CALL_BUSY")
     };
   }, [socketRef.current, closeConnection]);
 
