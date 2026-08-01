@@ -15,6 +15,8 @@ import { useWebRTC } from "@/hooks/useWebRTC";
 import IncomingCallModal from "@/components/call/IncomingCallModal";
 import CallScreen from "@/components/call/CallScreen";
 import { useCallAudio } from "@/hooks/useCallAudio";
+import AudioCallScreen from "@/components/call/AudioCallScreen";
+import { useCallState } from "@/hooks/useCallState";
 
 
 export default function Home() {
@@ -39,6 +41,20 @@ export default function Home() {
   const [viewingStatus, setViewingStatus] = useState<any>(null);
   const statusFileInputRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
+
+  const {
+    incomingCall,
+    setIncomingCall,
+
+    isInCall,
+    setIsInCall,
+
+    callStartTime,
+    setCallStartTime,
+
+    activeCallType,
+    setActiveCallType,
+  } = useCallState();
 
   const {
     startLocalStream,
@@ -68,18 +84,9 @@ export default function Home() {
     stopOutgoing
   } = useCallAudio()
 
-  const [incomingCall, setIncomingCall] = useState<{
-    from: string;
-    offer: RTCSessionDescriptionInit;
-    caller: {
-      id: string
-      name: string
-      image?: string
-    }
-  } | null>(null);
 
-  const [isInCall, setIsInCall] = useState(false);
-  const [callStartTime, setCallStartTime] = useState<number | null>(null);
+
+
   const callTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
@@ -99,12 +106,14 @@ export default function Home() {
   useEffect(() => {
     if (!socketRef.current) return;
 
-    socketRef.current?.on("CALL_OFFER", ({ from, offer, caller }) => {
+    socketRef.current?.on("CALL_OFFER", ({ from, offer, caller, type }) => {
       playIncoming()
+      setActiveCallType(type)
       setIncomingCall({
         from,
         offer,
         caller,
+        type
       });
     });
 
@@ -343,7 +352,8 @@ export default function Home() {
 
 
 
-  async function handleStartCall() {
+  async function handleStartCall(type: "audio" | "video") {
+    setActiveCallType(type)
     if (!selectedChat) {
       console.log("selectedChat is null");
       return;
@@ -360,7 +370,7 @@ export default function Home() {
     console.log("otherUser:", otherUser)
     if (!otherUser) return;
     playOutgoing();
-    const stream = await startLocalStream();
+    const stream = await startLocalStream(type);
 
     createPeerConnection();
 
@@ -380,6 +390,7 @@ export default function Home() {
     socketRef.current.emit("CALL_OFFER", {
       to: otherUser._id,
       offer,
+      type: type,
       caller: {
         id: currentUserData?.userExist?._id,
         name: currentUserData?.userExist?.name,
@@ -388,7 +399,7 @@ export default function Home() {
     });
 
     setIsInCall(true);
-    setCallStartTime(Date.now())
+
 
     callTimeoutRef.current = setTimeout(() => {
       handleNoAnswer(otherUser._id);
@@ -400,8 +411,10 @@ export default function Home() {
     if (!incomingCall || !socketRef.current) return;
 
     try {
-      const stream = await startLocalStream();
+      console.log("incomingCall.type:", incomingCall.type);
+      const stream = await startLocalStream(incomingCall.type);
 
+      setActiveCallType(incomingCall.type)
       createPeerConnection();
 
       registerTrackHandler();
@@ -429,11 +442,6 @@ export default function Home() {
 
       setIncomingCall(null);
       setIsInCall(true);
-
-      callTimeoutRef.current = setTimeout(() => {
-        handleNoAnswer(otherUser._id);
-      }, 30000);
-
 
       console.log("Call accepted");
     } catch (error) {
@@ -465,7 +473,7 @@ export default function Home() {
           receiverId: incomingCall.from,
           duration: 0,
           status: "rejected",
-          type: "video",
+          type: incomingCall.type,
         }),
       });
     } catch (error) {
@@ -494,7 +502,7 @@ export default function Home() {
           receiverId,
           duration: 0,
           status: "missed",
-          type: "video",
+          type: activeCallType!,
         }),
       });
     } catch (error) {
@@ -513,7 +521,6 @@ export default function Home() {
   }
 
   async function handleEndCall() {
-
     if (callTimeoutRef.current) {
       clearTimeout(callTimeoutRef.current);
       callTimeoutRef.current = null;
@@ -528,45 +535,38 @@ export default function Home() {
     stopIncoming();
     stopOutgoing();
 
-    closeConnection();
+    await closeConnection();
 
     socketRef.current?.emit("CALL_END", {
       to: otherUser?._id,
       cancelled: !answered,
     });
 
-    const duration = callStartTime
-      ? Math.floor((Date.now() - callStartTime) / 1000)
-      : 0;
-
-    if (otherUser?._id) {
+    if (answered && otherUser?._id) {
       try {
-        const answered = callStartTime !== null;
+        const duration = Math.floor(
+          (Date.now() - callStartTime!) / 1000
+        );
 
-        if (answered && otherUser?._id) {
-          const duration = Math.floor((Date.now() - callStartTime) / 1000);
-
-          await fetch("/api/calls", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              receiverId: otherUser._id,
-              duration,
-              status: "answered",
-              type: "video",
-            }),
-          });
-        }
+        await fetch("/api/calls", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            receiverId: otherUser._id,
+            duration,
+            status: "answered",
+            type: activeCallType!,
+          }),
+        });
       } catch (error) {
         console.error("Failed to save call:", error);
-      } finally {
-        setCallStartTime(null)
-        setIsInCall(false)
       }
     }
 
+    setCallStartTime(null);
+    setIsInCall(false);
   }
 
   // function handleCallAgain(
@@ -718,10 +718,16 @@ export default function Home() {
               <div className="text-xs text-[#2DD4A7]">typing...</div>
             )}
             <button
-              onClick={handleStartCall}
-              className="rounded-full bg-[#2DD4A7] px-4 py-2 text-black"
+              onClick={() => handleStartCall("audio")}
+              className="rounded-full p-2 transition hover:bg-zinc-200 dark:hover:bg-zinc-800"
             >
               📞
+            </button>
+            <button
+              onClick={() => handleStartCall("video")}
+              className="rounded-full bg-[#2DD4A7] px-4 py-2 text-black"
+            >
+              📹
             </button>
           </div>
 
@@ -895,19 +901,38 @@ export default function Home() {
         />
       )}
 
-      {isInCall && (
-        <CallScreen
-          localVideoRef={localVideoRef}
-          remoteVideoRef={remoteVideoRef}
-          localStream={localStream}
-          remoteStream={remoteStream}
-          onEndCall={handleEndCall}
-          toggleMicrophone={toggleMicrophone}
-          toggleCamera={toggleCamera}
-          isMicEnabled={isMicEnabled}
-          isCameraEnabled={isCameraEnabled}
-        />
-      )}
+      {isInCall &&
+        (activeCallType === "video" ? (
+          <CallScreen
+            localVideoRef={localVideoRef}
+            remoteVideoRef={remoteVideoRef}
+            localStream={localStream}
+            remoteStream={remoteStream}
+            onEndCall={handleEndCall}
+            toggleMicrophone={toggleMicrophone}
+            toggleCamera={toggleCamera}
+            isMicEnabled={isMicEnabled}
+            isCameraEnabled={isCameraEnabled}
+          />
+        ) : (
+          <AudioCallScreen
+            userName={
+              selectedChat?.members.find(
+                (m: any) =>
+                  m._id !== currentUserData?.userExist?._id
+              )?.name || "Unknown"
+            }
+            userImage={
+              selectedChat?.members.find(
+                (m: any) =>
+                  m._id !== currentUserData?.userExist?._id
+              )?.avatar
+            }
+            isMicEnabled={isMicEnabled}
+            toggleMicrophone={toggleMicrophone}
+            onEndCall={handleEndCall}
+          />
+        ))}
     </div>
   );
 }

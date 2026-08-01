@@ -51,10 +51,10 @@ export function useWebRTC() {
     return pc;
   };
 
-  const startLocalStream = async () => {
+  const startLocalStream = async (type: "audio" | "video") => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: true,
+        video: type === "video",
         audio: true,
       });
 
@@ -148,7 +148,7 @@ export function useWebRTC() {
     };
   };
 
-  const closeConnection = () => {
+  const closeConnection = async () => {
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach((track) => track.stop());
       localStreamRef.current = null;
@@ -169,12 +169,15 @@ export function useWebRTC() {
     }
 
     if (localVideoRef.current) {
+      localVideoRef.current.pause();
       localVideoRef.current.srcObject = null;
     }
 
     if (remoteVideoRef.current) {
+      remoteVideoRef.current.pause();
       remoteVideoRef.current.srcObject = null;
     }
+    await Promise.resolve();
   };
   return {
     peerConnection,

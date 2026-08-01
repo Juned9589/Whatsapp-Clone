@@ -1,6 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import CallTimer from "../CallTimer";
+import CallControls from "../CallControls";
+
+
 
 interface CallScreenProps {
     localVideoRef: React.RefObject<HTMLVideoElement>;
@@ -76,37 +80,17 @@ export default function CallScreen({
             />
 
             {/* Timer */}
-            <div className="absolute top-6 left-1/2 -translate-x-1/2 rounded-full bg-black/50 px-4 py-2 text-white">
-                {Math.floor(duration / 60)
-                    .toString()
-                    .padStart(2, "0")}
-                :
-                {(duration % 60).toString().padStart(2, "0")}
-            </div>
+            <CallTimer duration={duration} />
 
             {/* End Call Button */}
-            <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex items-center gap-4">
-                <button
-                    onClick={toggleMicrophone}
-                    className="rounded-full bg-gray-800 px-5 py-4 text-white"
-                >
-                    {isMicEnabled ? "🎤" : "🔇"}
-                </button>
-
-                <button
-                    onClick={onEndCall}
-                    className="rounded-full bg-red-600 px-6 py-4 text-white"
-                >
-                    📞
-                </button>
-
-                <button
-                    onClick={toggleCamera}
-                    className="rounded-full bg-gray-800 px-5 py-4 text-white"
-                >
-                    {isCameraEnabled ? "📹" : "🚫📹"}
-                </button>
-            </div>
+            <CallControls
+                isMicEnabled={isMicEnabled}
+                isCameraEnabled={isCameraEnabled}
+                showCamera
+                toggleMicrophone={toggleMicrophone}
+                toggleCamera={toggleCamera}
+                onEndCall={onEndCall}
+            />
         </div>
     );
 }

@@ -7,7 +7,7 @@ export function registerCallHandlers(
   socket: Socket,
   userId: string,
 ) {
-  socket.on("CALL_OFFER", ({ to, offer, caller }) => {
+  socket.on("CALL_OFFER", ({ to, offer, caller, type }) => {
     console.log(`Call offer from ${userId} to ${to}`);
 
     // Busy check
@@ -22,6 +22,7 @@ export function registerCallHandlers(
     io.to(to).emit("CALL_OFFER", {
       from: userId,
       offer,
+      type,
       caller,
     });
   });
