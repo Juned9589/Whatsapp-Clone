@@ -17,6 +17,15 @@ import CallScreen from "@/components/call/CallScreen";
 import { useCallAudio } from "@/hooks/useCallAudio";
 import AudioCallScreen from "@/components/call/AudioCallScreen";
 import { useCallState } from "@/hooks/useCallState";
+import { useCallSocket } from "@/hooks/useCallSocket";
+import ChatHeader from "@/components/chat/ChatHeader";
+import ChatMessages from "@/components/chat/ChatMessages";
+import ChatInput from "@/components/chat/ChatInput";
+import ChatSidebar from "@/components/chat/ChatSidebar";
+import GroupModal from "@/components/group/GroupModal";
+import StatusViewer from "@/components/status/StatusViewer";
+import EmptyChat from "@/components/chat/EmptyChat";
+
 
 
 export default function Home() {
@@ -40,6 +49,7 @@ export default function Home() {
   const viewStatus = useViewStatus();
   const [viewingStatus, setViewingStatus] = useState<any>(null);
   const statusFileInputRef = useRef<HTMLInputElement>(null);
+
   const queryClient = useQueryClient();
 
   const {
@@ -89,134 +99,28 @@ export default function Home() {
 
   const callTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  useEffect(() => {
-    if (!socketRef.current) return;
+  useCallSocket({
+    socketRef,
 
-    socketRef.current.on("message:receive", (message: any) => {
-      queryClient.setQueryData(["messages", message.chatId], (old: any) => ({
-        messages: [...(old?.messages || []), message],
-      }));
-    });
+    playIncoming,
+    stopIncoming,
+    playOutgoing,
+    stopOutgoing,
 
-    return () => {
-      socketRef.current?.off("message:receive");
-    };
-  }, [socketRef.current]);
+    setIncomingCall,
+    setActiveCallType,
 
-  useEffect(() => {
-    if (!socketRef.current) return;
+    setCallStartTime,
+    setIsInCall,
 
-    socketRef.current?.on("CALL_OFFER", ({ from, offer, caller, type }) => {
-      playIncoming()
-      setActiveCallType(type)
-      setIncomingCall({
-        from,
-        offer,
-        caller,
-        type
-      });
-    });
+    closeConnection,
+    addIceCandidate,
+    setRemoteAnswer,
 
-    return () => {
-      socketRef.current?.off("CALL_OFFER");
-    };
-  }, [socketRef.current]);
+    callTimeoutRef,
+  });
 
-  useEffect(() => {
-    if (!socketRef.current) return;
 
-    socketRef.current.on("CALL_ANSWER", async ({ answer }) => {
-      stopOutgoing();
-
-      //  Clear caller timeout
-      if (callTimeoutRef.current) {
-        clearTimeout(callTimeoutRef.current);
-        callTimeoutRef.current = null;
-      }
-
-      await setRemoteAnswer(answer);
-
-      // Call actually connected now
-      setCallStartTime(Date.now());
-
-      console.log("Call answered");
-    });
-
-    return () => {
-      socketRef.current?.off("CALL_ANSWER");
-    };
-  }, [socketRef.current, setRemoteAnswer]);
-
-  useEffect(() => {
-    if (!socketRef.current) return;
-
-    socketRef.current.on("ICE_CANDIDATE", async ({ candidate }) => {
-      try {
-        await addIceCandidate(candidate);
-      } catch (error) {
-        console.error("Failed to add ICE candidate:", error);
-      }
-    });
-
-    return () => {
-      socketRef.current?.off("ICE_CANDIDATE");
-    };
-  }, [socketRef.current, addIceCandidate]);
-
-  useEffect(() => {
-    if (!socketRef.current) return;
-
-    socketRef.current.on("CALL_END", ({ cancelled }) => {
-      stopIncoming();
-      stopOutgoing();
-
-      closeConnection();
-
-      if (cancelled) {
-        setIncomingCall(null);
-      }
-
-      setIncomingCall(null);
-      setCallStartTime(null);
-      setIsInCall(false);
-    });
-
-    socketRef.current.on("CALL_REJECT", () => {
-      console.log("CALL_REJECT received");
-
-      stopIncoming();
-      stopOutgoing();
-
-      closeConnection();
-
-      setIncomingCall(null);
-      setCallStartTime(null);
-      setIsInCall(false);
-
-      alert("Call Rejected");
-    });
-
-    socketRef.current.on("CALL_BUSY", () => {
-      console.log("CALL_BUSY received");
-
-      stopOutgoing();
-      stopIncoming();
-
-      closeConnection();
-
-      setIncomingCall(null);
-      setCallStartTime(null);
-      setIsInCall(false);
-
-      alert("User is busy");
-    });
-
-    return () => {
-      socketRef.current?.off("CALL_END");
-      socketRef.current?.off("CALL_REJECT");
-      socketRef.current?.off("CALL_BUSY")
-    };
-  }, [socketRef.current, closeConnection]);
 
   useEffect(() => {
     if (selectedChat && socketRef.current) {
@@ -592,307 +496,73 @@ export default function Home() {
   return (
     <div className="flex h-screen bg-[#0B1414]">
       {/* Sidebar */}
-      <div className="w-full md:w-96 border-r border-[#1E2E2C] flex flex-col">
-        <div className="p-4 border-b border-[#1E2E2C] flex items-center justify-between">
-          <h1 className="text-xl font-bold text-[#EAF6F2] font-[family-name:var(--font-display)]">
-            Chats
-          </h1>
-          <button
-            onClick={() => setShowGroupModal(true)}
-            className="text-[#2DD4A7] text-2xl"
-          >
-            +
-          </button>
-        </div>
-        <div className="border-b border-[#1E2E2C] p-4">
-          <h2 className="mb-3 text-sm font-semibold text-[#7FA69B]">
-            Status
-          </h2>
-
-          {/* My Status */}
-
-          <button
-            onClick={() => statusFileInputRef.current?.click()}
-            className="mb-3 flex w-full items-center gap-3 rounded-lg p-2 hover:bg-[#121D1C]"
-          >
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#2DD4A7] text-black">
-              +
-            </div>
-
-            <div className="text-left">
-              <p className="text-[#EAF6F2]">
-                My Status
-              </p>
-
-              <p className="text-xs text-[#7FA69B]">
-                Add a status
-              </p>
-            </div>
-          </button>
-
-          <input
-            ref={statusFileInputRef}
-            type="file"
-            className="hidden"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-
-              if (file) {
-                handleStatusUpload(file);
-              }
-            }}
-          />
-        </div>
-        <div className="mt-4">
-          <p className="text-xs text-[#7FA69B] mb-2 uppercase">
-            Recent Updates
-          </p>
-
-          <div className="space-y-2">
-            {statusesData?.statuses?.map((status: any) => (
-              <button
-                key={status._id}
-                onClick={() => {
-                  setViewingStatus(status);
-                  viewStatus.mutate(status._id);
-                }}
-                className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-[#121D1C]"
-              >
-                <div className="w-12 h-12 rounded-full bg-[#2DD4A7] flex items-center justify-center text-black font-bold">
-                  {status.userId.name.charAt(0).toUpperCase()}
-                </div>
-                <div className="text-left">
-                  <p className="text-[#EAF6F2] font-medium">
-                    {status.userId.name}
-                  </p>
-
-                  <p className="text-xs text-[#7FA69B]">
-                    {formatDistanceToNow(new Date(status.createdAt), {
-                      addSuffix: true,
-                    })}
-                  </p>
-                </div>
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="flex-1 overflow-y-auto">
-          {isLoading && <p className="text-[#7FA69B] p-4">Loading...</p>}
-          {chatsData?.chats?.map((chat: any) => {
-            const otherMember = chat.members.find(
-              (m: any) => m._id !== currentUserData?.userExist?._id
-            );
-            const displayName = chat.isGroup ? chat.groupName : otherMember?.name;
-            return (
-              <div
-                key={chat._id}
-                onClick={() => setSelectedChat(chat)}
-                className="p-4 border-b border-[#1E2E2C] hover:bg-[#121D1C] cursor-pointer text-[#EAF6F2]"
-              >
-                {displayName || "Unknown"}
-              </div>
-            );
-          })}
-        </div>
-      </div>
+      <ChatSidebar
+        isLoading={isLoading}
+        chatsData={chatsData}
+        currentUser={currentUserData?.userExist}
+        selectedChat={selectedChat}
+        setSelectedChat={setSelectedChat}
+        showGroupModal={showGroupModal}
+        setShowGroupModal={setShowGroupModal}
+        statusesData={statusesData}
+        usersData={usersData}
+        statusFileInputRef={statusFileInputRef}
+        handleStatusUpload={handleStatusUpload}
+        setViewingStatus={setViewingStatus}
+        viewStatus={viewStatus}
+      />
 
       {/* Chat window area */}
       {selectedChat ? (
         <div className="flex-1 flex flex-col">
           {/* Header — naam + typing indicator dono yahan grouped hain */}
-          <div className="p-4 border-b border-[#1E2E2C] flex items-center justify-between text-[#EAF6F2]">
-            <div className="flex items-center gap-2">
-              {selectedChat.isGroup
-                ? selectedChat.groupName
-                : selectedChat.members.find(
-                  (m: any) => m._id !== currentUserData?.userExist?._id
-                )?.name}
-              {!selectedChat.isGroup &&
-                onlineUsers.has(
-                  selectedChat.members.find(
-                    (m: any) => m._id !== currentUserData?.userExist?._id
-                  )?._id
-                ) && <span className="w-2 h-2 rounded-full bg-[#2DD4A7]" />}
-            </div>
-            {isOtherTyping && (
-              <div className="text-xs text-[#2DD4A7]">typing...</div>
-            )}
-            <button
-              onClick={() => handleStartCall("audio")}
-              className="rounded-full p-2 transition hover:bg-zinc-200 dark:hover:bg-zinc-800"
-            >
-              📞
-            </button>
-            <button
-              onClick={() => handleStartCall("video")}
-              className="rounded-full bg-[#2DD4A7] px-4 py-2 text-black"
-            >
-              📹
-            </button>
-          </div>
 
-          <div className="flex-1 overflow-y-auto p-4 space-y-2">
-            {messagesData?.messages?.map((msg: any) => {
-              const isOwnMessage = msg.sender === currentUserData?.userExist?._id;
-              return (
-                <div
-                  key={msg._id}
-                  className={`flex ${isOwnMessage ? "justify-end" : "justify-start"}`}
-                >
-                  <div
-                    className={`max-w-xs px-4 py-2 rounded-2xl ${isOwnMessage
-                      ? "bg-[#2DD4A7] text-[#0B1414]"
-                      : "bg-[#121D1C] text-[#EAF6F2]"
-                      }`}
-                  >
-                    {selectedChat.isGroup && !isOwnMessage && (
-                      <div className="text-xs text-[#2DD4A7] mb-1">
-                        {selectedChat.members.find((m: any) => m._id === msg.sender)?.name}
-                      </div>
-                    )}
-                    {msg.type === "image" ? (
-                      <img
-                        src={`https://${process.env.NEXT_PUBLIC_AWS_S3_BUCKET_NAME}.s3.${process.env.NEXT_PUBLIC_AWS_REGION}.amazonaws.com/${msg.content}`}
-                        alt="uploaded"
-                        className="rounded-lg max-w-full"
-                      />
-                    ) : (
-                      msg.content
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+          <ChatHeader
+            selectedChat={selectedChat}
+            currentUser={currentUserData?.userExist}
+            onlineUsers={onlineUsers}
+            isOtherTyping={isOtherTyping}
+            onAudioCall={() => handleStartCall("audio")}
+            onVideoCall={() => handleStartCall("video")}
+          />
 
-          <div className="p-4 border-t border-[#1E2E2C] flex gap-2">
+          <ChatMessages
+            messages={messagesData?.messages || []}
+            selectedChat={selectedChat}
+            currentUser={currentUserData?.userExist}
+          />
 
-            <input
-              type="file"
-              ref={fileInputRef}
-              className="hidden"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) handleFileUpload(file);
-              }}
-            />
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="text-[#7FA69B] hover:text-[#2DD4A7] px-2"
-              type="button"
-            >
-              📎
-            </button>
-
-            <input
-              value={messageText}
-              onChange={(e) => {
-                setMessageText(e.target.value);
-
-                if (selectedChat && socketRef.current) {
-                  socketRef.current.emit("typing:start", selectedChat._id);
-
-                  if (typingTimeoutRef.current) {
-                    clearTimeout(typingTimeoutRef.current);
-                  }
-
-                  typingTimeoutRef.current = setTimeout(() => {
-                    socketRef.current?.emit("typing:stop", selectedChat._id);
-                  }, 1500);
-                }
-              }}
-              onKeyDown={(e) => e.key === "Enter" && handleSendMessage()}
-              placeholder="Type a message..."
-              className="flex-1 bg-[#121D1C] border border-[#1E2E2C] rounded-full px-4 py-2 text-[#EAF6F2] placeholder:text-[#4A6660] focus:outline-none focus:ring-2 focus:ring-[#2DD4A7]"
-            />
-            <button
-              onClick={handleSendMessage}
-              className="bg-[#2DD4A7] text-[#0B1414] px-6 py-2 rounded-full font-medium"
-            >
-              Send
-            </button>
-          </div>
+          <ChatInput
+            messageText={messageText}
+            setMessageText={setMessageText}
+            handleSendMessage={handleSendMessage}
+            handleFileUpload={handleFileUpload}
+            fileInputRef={fileInputRef}
+            selectedChat={selectedChat}
+            socketRef={socketRef}
+            typingTimeoutRef={typingTimeoutRef}
+          />
         </div>
       ) : (
-        <div className="hidden md:flex flex-1 items-center justify-center text-[#7FA69B]">
-          Select a chat to start messaging
-        </div>
+        <EmptyChat />
       )}
-      {showGroupModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-[#121D1C] rounded-2xl p-6 w-full max-w-sm">
-            <h2 className="text-[#EAF6F2] text-lg font-bold mb-4">Create Group</h2>
-            <input
-              value={groupName}
-              onChange={(e) => setGroupName(e.target.value)}
-              placeholder="Group name"
-              className="w-full bg-[#0B1414] border border-[#1E2E2C] rounded-lg px-3 py-2 text-[#EAF6F2] mb-4"
-            />
-            <div className="max-h-48 overflow-y-auto space-y-2 mb-4">
-              {usersData?.users?.map((user: any) => (
-                <label key={user._id} className="flex items-center gap-2 text-[#EAF6F2]">
-                  <input
-                    type="checkbox"
-                    checked={selectedMembers.includes(user._id)}
-                    onChange={(e) => {
-                      if (e.target.checked) {
-                        setSelectedMembers((prev) => [...prev, user._id]);
-                      } else {
-                        setSelectedMembers((prev) => prev.filter((id) => id !== user._id));
-                      }
-                    }}
-                  />
-                  {user.name}
-                </label>
-              ))}
-            </div>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setShowGroupModal(false)}
-                className="flex-1 bg-[#1E2E2C] text-[#EAF6F2] py-2 rounded-lg"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleCreateGroup}
-                className="flex-1 bg-[#2DD4A7] text-[#0B1414] py-2 rounded-lg font-medium"
-              >
-                Create
-              </button>
-            </div>
-          </div>
+      <GroupModal
+        show={showGroupModal}
+        groupName={groupName}
+        setGroupName={setGroupName}
+        selectedMembers={selectedMembers}
+        setSelectedMembers={setSelectedMembers}
+        usersData={usersData}
+        onClose={() => setShowGroupModal(false)}
+        onCreate={handleCreateGroup}
+      />
 
-        </div>
+      <StatusViewer
+        viewingStatus={viewingStatus}
+        setViewingStatus={setViewingStatus}
+      />
 
-      )}
-      {viewingStatus && (
-        <div
-          className="fixed inset-0 bg-black flex items-center justify-center z-50"
-          onClick={() => setViewingStatus(null)}
-        >
-          <div className="max-w-md w-full mx-4">
-            <div className="flex items-center gap-3 mb-4 px-2">
-              <div className="w-10 h-10 rounded-full bg-[#2DD4A7] flex items-center justify-center text-black font-bold">
-                {viewingStatus.userId.name.charAt(0).toUpperCase()}
-              </div>
-              <div>
-                <p className="text-[#EAF6F2] font-medium">{viewingStatus.userId.name}</p>
-                <p className="text-xs text-[#7FA69B]">
-                  {formatDistanceToNow(new Date(viewingStatus.createdAt), { addSuffix: true })}
-                </p>
-              </div>
-            </div>
-            <img
-              src={`https://${process.env.NEXT_PUBLIC_AWS_S3_BUCKET_NAME}.s3.${process.env.NEXT_PUBLIC_AWS_REGION}.amazonaws.com/${viewingStatus.mediaUrl}`}
-              alt="status"
-              className="w-full rounded-lg"
-            />
-            {viewingStatus.caption && (
-              <p className="text-[#EAF6F2] text-center mt-3">{viewingStatus.caption}</p>
-            )}
-          </div>
-        </div>
-      )}
+
       {incomingCall && (
         <IncomingCallModal
           callerName={incomingCall?.caller?.name}
