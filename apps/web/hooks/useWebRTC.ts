@@ -5,7 +5,11 @@ export function useWebRTC() {
 
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
 
+  const localStreamRef = useRef<MediaStream | null>(null);
+
   const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
+
+  const remoteStreamRef = useRef<MediaStream | null>(null);
 
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
 
@@ -55,6 +59,7 @@ export function useWebRTC() {
       });
 
       setLocalStream(stream);
+      localStreamRef.current = stream;
 
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = stream;
@@ -133,6 +138,7 @@ export function useWebRTC() {
       const stream = event.streams[0];
 
       setRemoteStream(stream);
+      remoteStreamRef.current = stream;
 
       if (remoteVideoRef.current) {
         if (remoteVideoRef.current.srcObject !== stream) {
@@ -143,15 +149,19 @@ export function useWebRTC() {
   };
 
   const closeConnection = () => {
-    if (localStream) {
-      localStream.getTracks().forEach((track) => track.stop());
-      setLocalStream(null);
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach((track) => track.stop());
+      localStreamRef.current = null;
     }
 
-    if (remoteStream) {
-      remoteStream.getTracks().forEach((track) => track.stop());
-      setRemoteStream(null);
+    setLocalStream(null);
+
+    if (remoteStreamRef.current) {
+      remoteStreamRef.current.getTracks().forEach((track) => track.stop());
+      remoteStreamRef.current = null;
     }
+
+    setRemoteStream(null);
 
     if (peerConnection.current) {
       peerConnection.current.close();

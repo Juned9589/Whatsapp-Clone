@@ -45,7 +45,7 @@ export function registerCallHandlers(
     });
   });
 
-  socket.on("CALL_END", ({ to }) => {
+  socket.on("CALL_END", ({ to, cancelled }) => {
     console.log(`Call ended by ${userId}`);
 
     activeCalls.delete(userId);
@@ -53,6 +53,7 @@ export function registerCallHandlers(
 
     io.to(to).emit("CALL_END", {
       from: userId,
+      cancelled,
     });
   });
 

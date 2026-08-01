@@ -117,8 +117,20 @@ export default function Home() {
     if (!socketRef.current) return;
 
     socketRef.current.on("CALL_ANSWER", async ({ answer }) => {
-      stopOutgoing()
+      stopOutgoing();
+
+      //  Clear caller timeout
+      if (callTimeoutRef.current) {
+        clearTimeout(callTimeoutRef.current);
+        callTimeoutRef.current = null;
+      }
+
       await setRemoteAnswer(answer);
+
+      // Call actually connected now
+      setCallStartTime(Date.now());
+
+      console.log("Call answered");
     });
 
     return () => {
@@ -145,11 +157,15 @@ export default function Home() {
   useEffect(() => {
     if (!socketRef.current) return;
 
-    socketRef.current.on("CALL_END", () => {
+    socketRef.current.on("CALL_END", ({ cancelled }) => {
       stopIncoming();
       stopOutgoing();
 
       closeConnection();
+
+      if (cancelled) {
+        setIncomingCall(null);
+      }
 
       setIncomingCall(null);
       setCallStartTime(null);
@@ -413,7 +429,11 @@ export default function Home() {
 
       setIncomingCall(null);
       setIsInCall(true);
-      setCallStartTime(Date.now())
+
+      callTimeoutRef.current = setTimeout(() => {
+        handleNoAnswer(otherUser._id);
+      }, 30000);
+
 
       console.log("Call accepted");
     } catch (error) {
@@ -503,6 +523,8 @@ export default function Home() {
       (m: any) => m._id !== currentUserData?.userExist?._id
     );
 
+    const answered = callStartTime !== null;
+
     stopIncoming();
     stopOutgoing();
 
@@ -510,6 +532,7 @@ export default function Home() {
 
     socketRef.current?.emit("CALL_END", {
       to: otherUser?._id,
+      cancelled: !answered,
     });
 
     const duration = callStartTime
@@ -518,18 +541,24 @@ export default function Home() {
 
     if (otherUser?._id) {
       try {
-        await fetch("/api/calls", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            receiverId: otherUser._id,
-            duration: duration, // Abhi 0, baad me actual timer save karenge
-            status: "answered",
-            type: "video",
-          }),
-        });
+        const answered = callStartTime !== null;
+
+        if (answered && otherUser?._id) {
+          const duration = Math.floor((Date.now() - callStartTime) / 1000);
+
+          await fetch("/api/calls", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              receiverId: otherUser._id,
+              duration,
+              status: "answered",
+              type: "video",
+            }),
+          });
+        }
       } catch (error) {
         console.error("Failed to save call:", error);
       } finally {
