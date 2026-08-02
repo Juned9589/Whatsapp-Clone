@@ -204,13 +204,17 @@ export default function Home() {
 
   function handleSendMessage() {
     if (!messageText.trim() || !selectedChat) return;
+
     socketRef.current?.emit("message:send", {
       chatId: selectedChat._id,
       content: messageText,
+      replyTo: replyMessage?._id || null,
     });
+
     socketRef.current?.emit("typing:stop", selectedChat._id);
+
     setMessageText("");
-    setReplyMessage(null)
+    setReplyMessage(null);
   }
 
   function handleCreateGroup() {
