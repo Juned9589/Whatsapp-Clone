@@ -24,6 +24,7 @@ export async function POST(request: Request) {
         members: [(auth as any).userId, receiverId],
       });
     }
+    chat = await chat.populate("members", "name avatar status");
 
     return Response.json({ chat });
   } catch (error) {

@@ -24,6 +24,8 @@ interface ChatSidebarProps {
     setViewingStatus: (status: any) => void;
 
     viewStatus: any;
+    showNewChatModal: boolean
+    SetShowNewChatModal: React.Dispatch<React.SetStateAction<boolean>>
 }
 
 export default function ChatSidebar({
@@ -37,19 +39,35 @@ export default function ChatSidebar({
     handleStatusUpload,
     setViewingStatus,
     viewStatus,
+    showNewChatModal,
+    SetShowNewChatModal
 }: ChatSidebarProps) {
     return (
         <div className="w-full md:w-96 border-r border-[#1E2E2C] flex flex-col">
             <div className="p-4 border-b border-[#1E2E2C] flex items-center justify-between">
-                <h1 className="text-xl font-bold text-[#EAF6F2] font-[family-name:var(--font-display)]">
+                <h1 className="text-xl font-bold text-[#EAF6F2]">
                     Chats
                 </h1>
-                <button
-                    onClick={() => setShowGroupModal(true)}
-                    className="text-[#2DD4A7] text-2xl"
-                >
-                    +
-                </button>
+
+                <div className="flex items-center gap-3">
+
+                    <button
+                        onClick={() => SetShowNewChatModal(true)}
+                        className="text-xl"
+                        title="New Chat"
+                    >
+                        💬
+                    </button>
+
+                    <button
+                        onClick={() => setShowGroupModal(true)}
+                        className="text-[#2DD4A7] text-2xl"
+                        title="Create Group"
+                    >
+                        +
+                    </button>
+
+                </div>
             </div>
             <div className="border-b border-[#1E2E2C] p-4">
                 <h2 className="mb-3 text-sm font-semibold text-[#7FA69B]">
@@ -127,13 +145,13 @@ export default function ChatSidebar({
                 {isLoading && <p className="text-[#7FA69B] p-4">Loading...</p>}
                 {chatsData?.chats?.map((chat: any) => {
                     const otherMember = chat.members.find(
-                        (m: any) => m._id !== currentUser
+                        (m: any) => m._id !== currentUser?._id
                     );
                     const displayName = chat.isGroup ? chat.groupName : otherMember?.name;
                     return (
                         <div
                             key={chat._id}
-                            onClick={() => setSelectedChat(chat)}
+                            onClick={() => { console.log(chat); setSelectedChat(chat) }}
                             className="p-4 border-b border-[#1E2E2C] hover:bg-[#121D1C] cursor-pointer text-[#EAF6F2]"
                         >
                             {displayName || "Unknown"}

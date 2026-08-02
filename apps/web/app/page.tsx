@@ -25,6 +25,7 @@ import ChatSidebar from "@/components/chat/ChatSidebar";
 import GroupModal from "@/components/group/GroupModal";
 import StatusViewer from "@/components/status/StatusViewer";
 import EmptyChat from "@/components/chat/EmptyChat";
+import NewChatModal from "@/components/chat/NewChatModal";
 
 
 
@@ -94,10 +95,9 @@ export default function Home() {
     stopOutgoing
   } = useCallAudio()
 
-
-
-
   const callTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [replyMessage, setReplyMessage] = useState<any>(null);
+  const [showNewChatModal, setShowNewChatModal] = useState(false)
 
   useCallSocket({
     socketRef,
@@ -210,6 +210,7 @@ export default function Home() {
     });
     socketRef.current?.emit("typing:stop", selectedChat._id);
     setMessageText("");
+    setReplyMessage(null)
   }
 
   function handleCreateGroup() {
@@ -226,6 +227,49 @@ export default function Home() {
       }
     )
   }
+
+  async function handleStartNewChat(user: any) {
+    try {
+      const res = await fetch("/api/chats", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          receiverId: user._id,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.message);
+      }
+
+      await queryClient.invalidateQueries({
+        queryKey: ["chats"],
+      });
+
+      const refreshed = await queryClient.fetchQuery({
+        queryKey: ["chats"],
+      });
+
+      const newChat = refreshed.chats.find(
+        (c: any) => c._id === data.chat._id
+      );
+
+      if (newChat) {
+        setSelectedChat(newChat);
+      }
+
+      setSelectedChat(data.chat);
+
+      setShowNewChatModal(false);
+    } catch (error) {
+      console.error("Create chat failed:", error);
+    }
+  }
+
   async function handleStatusUpload(file: File) {
     try {
       const presignRes = await fetch("/api/upload/presign", {
@@ -493,6 +537,7 @@ export default function Home() {
   //   }
   // }
 
+
   return (
     <div className="flex h-screen bg-[#0B1414]">
       {/* Sidebar */}
@@ -510,6 +555,8 @@ export default function Home() {
         handleStatusUpload={handleStatusUpload}
         setViewingStatus={setViewingStatus}
         viewStatus={viewStatus}
+        showNewChatModal={showNewChatModal}
+        SetShowNewChatModal={setShowNewChatModal}
       />
 
       {/* Chat window area */}
@@ -530,6 +577,7 @@ export default function Home() {
             messages={messagesData?.messages || []}
             selectedChat={selectedChat}
             currentUser={currentUserData?.userExist}
+            setReplyMessage={setReplyMessage}
           />
 
           <ChatInput
@@ -541,6 +589,8 @@ export default function Home() {
             selectedChat={selectedChat}
             socketRef={socketRef}
             typingTimeoutRef={typingTimeoutRef}
+            replyMessage={replyMessage}
+            setReplyMessage={setReplyMessage}
           />
         </div>
       ) : (
@@ -555,6 +605,14 @@ export default function Home() {
         usersData={usersData}
         onClose={() => setShowGroupModal(false)}
         onCreate={handleCreateGroup}
+      />
+
+      <NewChatModal
+        open={showNewChatModal}
+        onClose={() => setShowNewChatModal(false)}
+        users={usersData?.users || []}
+        onSelectUser={handleStartNewChat}
+        currentUser={currentUserData?.userExist}
       />
 
       <StatusViewer

@@ -65,9 +65,20 @@ io.on("connection", async (socket) => {
         sender: (socket as any).userId,
         content: data.content,
         type: data.type || "text",
+        replyTo: data.replyTo || null,
       });
 
-      io.to(data.chatId).emit("message:receive", message);
+      const populatedMessage = await Message.findById(message._id)
+        .populate("sender", "name avatar")
+        .populate({
+          path: "replyTo",
+          populate: {
+            path: "sender",
+            select: "name avatar",
+          },
+        });
+
+      io.to(data.chatId).emit("message:receive", populatedMessage);
     } catch (error) {
       console.error("Message send error:", error);
     }

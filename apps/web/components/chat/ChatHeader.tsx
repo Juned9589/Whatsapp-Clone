@@ -23,7 +23,7 @@ export default function ChatHeader({
     const otherUser = selectedChat.isGroup
         ? null
         : selectedChat.members.find(
-            (m: any) => m._id !== currentUser?.userExist?._id
+            (m: any) => m._id !== currentUser?._id
         );
 
     return (

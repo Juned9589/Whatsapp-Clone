@@ -29,6 +29,7 @@ const messageSchema = new Schema(
     replyTo: {
       type: Schema.Types.ObjectId,
       ref: "Message",
+      default: null,
     },
   },
   { timestamps: true },
