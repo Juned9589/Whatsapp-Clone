@@ -48,12 +48,17 @@ export function useCallSocket({
       queryClient.setQueryData(["messages", message.chatId], (old: any) => ({
         messages: [...(old?.messages || []), message],
       }));
+
+      // Receiver tells server that message is delivered
+      socketRef.current?.emit("message:delivered", {
+        messageId: message._id,
+      });
     });
 
     return () => {
       socketRef.current?.off("message:receive");
     };
-  }, [socketRef.current]);
+  }, [queryClient]);
 
   useEffect(() => {
     if (!socketRef.current) return;
