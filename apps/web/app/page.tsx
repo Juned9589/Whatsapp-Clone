@@ -26,6 +26,9 @@ import GroupModal from "@/components/group/GroupModal";
 import StatusViewer from "@/components/status/StatusViewer";
 import EmptyChat from "@/components/chat/EmptyChat";
 import NewChatModal from "@/components/chat/NewChatModal";
+import { useChatActions } from "@/hooks/useChatAction";
+import { useUpload } from "@/hooks/useUpload";
+import { useStatus } from "@/hooks/useStatus";
 
 
 
@@ -52,6 +55,8 @@ export default function Home() {
   const statusFileInputRef = useRef<HTMLInputElement>(null);
 
   const queryClient = useQueryClient();
+
+
 
   const {
     incomingCall,
@@ -98,6 +103,46 @@ export default function Home() {
   const callTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [replyMessage, setReplyMessage] = useState<any>(null);
   const [showNewChatModal, setShowNewChatModal] = useState(false)
+
+  const {
+    handleSendMessage,
+    handleStartNewChat,
+    handleCreateGroup,
+  } = useChatActions({
+    socketRef,
+    selectedChat,
+
+    messageText,
+    setMessageText,
+
+    replyMessage,
+    setReplyMessage,
+
+    queryClient,
+
+    setSelectedChat,
+    setShowNewChatModal,
+
+    createGroup,
+
+    groupName,
+    setGroupName,
+
+    selectedMembers,
+    setSelectedMembers,
+
+    setShowGroupModal,
+  });
+
+  const { handleFileUpload } = useUpload({
+    socketRef,
+    selectedChat,
+  });
+
+  const { handleStatusUpload } = useStatus({
+    createStatus,
+    queryClient,
+  });
 
   useCallSocket({
     socketRef,
@@ -174,134 +219,6 @@ export default function Home() {
       socketRef.current?.off("user:offline");
     };
   }, [socketRef.current]);
-
-  async function handleFileUpload(file: File) {
-    try {
-      const presignRes = await fetch("/api/upload/presign", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fileName: file.name, fileType: file.type }),
-      });
-      const { uploadUrl, key } = await presignRes.json();
-
-      await fetch(uploadUrl, {
-        method: "PUT",
-        headers: { "Content-Type": file.type },
-        body: file,
-      });
-
-      const fileType = file.type.startsWith("image/") ? "image" : "document";
-
-      socketRef.current?.emit("message:send", {
-        chatId: selectedChat._id,
-        content: key,
-        type: fileType,
-      });
-    } catch (error) {
-      console.error("File upload error:", error);
-    }
-  }
-
-  function handleSendMessage() {
-    if (!messageText.trim() || !selectedChat) return;
-
-    socketRef.current?.emit("message:send", {
-      chatId: selectedChat._id,
-      content: messageText,
-      replyTo: replyMessage?._id || null,
-    });
-
-    socketRef.current?.emit("typing:stop", selectedChat._id);
-
-    setMessageText("");
-    setReplyMessage(null);
-  }
-
-  function handleCreateGroup() {
-    if (!groupName.trim() || selectedMembers.length === 0) return
-    createGroup.mutate(
-      { groupName, memberIds: selectedMembers },
-      {
-        onSuccess: () => {
-          setShowGroupModal(false)
-          setGroupName("")
-          setSelectedMembers([])
-          queryClient.invalidateQueries({ queryKey: ["chats"] })
-        }
-      }
-    )
-  }
-
-  async function handleStartNewChat(user: any) {
-    try {
-      const res = await fetch("/api/chats", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          receiverId: user._id,
-        }),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.message);
-      }
-
-      await queryClient.invalidateQueries({
-        queryKey: ["chats"],
-      });
-
-      const refreshed = await queryClient.fetchQuery({
-        queryKey: ["chats"],
-      });
-
-      const newChat = refreshed.chats.find(
-        (c: any) => c._id === data.chat._id
-      );
-
-      if (newChat) {
-        setSelectedChat(newChat);
-      }
-
-      setSelectedChat(data.chat);
-
-      setShowNewChatModal(false);
-    } catch (error) {
-      console.error("Create chat failed:", error);
-    }
-  }
-
-  async function handleStatusUpload(file: File) {
-    try {
-      const presignRes = await fetch("/api/upload/presign", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fileName: file.name, fileType: file.type }),
-      });
-      const { uploadUrl, key } = await presignRes.json();
-
-      await fetch(uploadUrl, {
-        method: "PUT",
-        headers: { "Content-Type": file.type },
-        body: file,
-      });
-
-      createStatus.mutate(
-        { mediaUrl: key },
-        {
-          onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["statuses"] });
-          },
-        }
-      );
-    } catch (error) {
-      console.error("Status upload error:", error);
-    }
-  }
-
 
 
   async function handleStartCall(type: "audio" | "video") {
