@@ -1,5 +1,7 @@
 "use client";
 
+import { formatDistanceToNow } from "date-fns";
+
 interface ChatHeaderProps {
     selectedChat: any;
     currentUser: any;
@@ -28,18 +30,25 @@ export default function ChatHeader({
 
     return (
         <div className="p-4 border-b border-[#1E2E2C] flex items-center justify-between text-[#EAF6F2]">
-            <div className="flex items-center gap-2">
-                <span>
+            <div className="flex flex-col">
+                <span className="font-medium">
                     {selectedChat.isGroup
                         ? selectedChat.groupName
                         : otherUser?.name}
                 </span>
 
-                {!selectedChat.isGroup &&
-                    otherUser &&
-                    onlineUsers.has(otherUser._id) && (
-                        <span className="w-2 h-2 rounded-full bg-[#2DD4A7]" />
-                    )}
+                {!selectedChat.isGroup && otherUser && (
+                    <span className="text-xs text-[#7FA69B]">
+                        {onlineUsers.has(otherUser._id)
+                            ? "🟢 Online"
+                            : `Last seen ${formatDistanceToNow(
+                                new Date(otherUser.lastSeen),
+                                {
+                                    addSuffix: true,
+                                }
+                            )}`}
+                    </span>
+                )}
             </div>
 
             {isOtherTyping && (

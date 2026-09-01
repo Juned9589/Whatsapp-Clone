@@ -1,4 +1,5 @@
 "use client";
+
 import { useEffect, useState, useRef } from "react";
 import { useChats } from "@/hooks/useChats";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
@@ -499,6 +500,7 @@ export default function Home() {
             selectedChat={selectedChat}
             currentUser={currentUserData?.userExist}
             setReplyMessage={setReplyMessage}
+            socketRef={socketRef}
           />
 
           <ChatInput

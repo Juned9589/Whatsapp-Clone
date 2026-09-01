@@ -44,7 +44,7 @@ export async function GET(request: Request) {
 
     const chats = await Chat.find({ members: (auth as any).userId }).populate(
       "members",
-      "name avatar status",
+      "name avatar status lastSeen",
     );
 
     return Response.json({ chats });

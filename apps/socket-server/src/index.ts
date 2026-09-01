@@ -7,7 +7,8 @@ import Redis from "ioredis";
 import { Server as SocketServer } from "socket.io";
 import { createAdapter } from "@socket.io/redis-adapter";
 import jwt from "jsonwebtoken";
-import { connectDB, Message } from "@repo/database";
+import { connectDB, Message, User } from "@repo/database";
+import mongoose from "mongoose";
 import * as cookie from "cookie";
 import { registerCallHandlers } from "./socket/callHandlers";
 
@@ -50,6 +51,9 @@ io.use((socket, next) => {
 
 io.on("connection", async (socket) => {
   const userId = (socket as any).userId;
+  await mongoose.model("User").findByIdAndUpdate(userId, {
+    status: "online",
+  });
   socket.join(userId);
   registerCallHandlers(io, socket, userId);
   redis.sadd("online_users", userId);
@@ -84,18 +88,123 @@ io.on("connection", async (socket) => {
     }
   });
 
-  socket.on("message:delivered", async (messageId: string) => {
-    try {
-      const updated = await Message.findByIdAndUpdate(
-        messageId,
-        { status: "delivered" },
-        { new: true },
-      );
-      if (updated) {
-        io.to(updated.chatId.toString()).emit("message:status_update", updated);
+  socket.on(
+    "message:delivered",
+    async ({ messageId }: { messageId: string }) => {
+      try {
+        const updated = await Message.findByIdAndUpdate(
+          messageId,
+          {
+            status: "delivered",
+          },
+          {
+            new: true,
+          },
+        );
+
+        if (!updated) return;
+
+        io.to(updated.chatId.toString()).emit("message:status_update", {
+          messageId: updated._id,
+          status: updated.status,
+        });
+      } catch (error) {
+        console.error("Delivery update error:", error);
       }
+    },
+  );
+
+  socket.on(
+    "message:reaction",
+    async ({ messageId, emoji }: { messageId: string; emoji: string }) => {
+      try {
+        const userId = (socket as any).userId;
+
+        const message = await Message.findById(messageId);
+
+        if (!message) return;
+        const existingReaction = message.reactions.find(
+          (reaction: any) => reaction.user.toString() === userId,
+        );
+
+        if (existingReaction) {
+          // Same emoji clicked -> remove reaction
+          if (existingReaction.emoji === emoji) {
+            message.reactions = message.reactions.filter(
+              (reaction: any) => reaction.user.toString() !== userId,
+            );
+          } else {
+            // Different emoji -> replace reaction
+            existingReaction.emoji = emoji;
+          }
+        } else {
+          // First reaction
+          message.reactions.push({
+            user: userId,
+            emoji,
+          });
+        }
+
+        await message.save();
+
+        const updatedMessage = await Message.findById(messageId)
+          .populate("sender", "name avatar")
+          .populate("reactions.user", "name avatar")
+          .populate({
+            path: "replyTo",
+            populate: {
+              path: "sender",
+              select: "name avatar",
+            },
+          });
+
+        io.to(message.chatId.toString()).emit(
+          "message:reaction_update",
+          updatedMessage,
+        );
+      } catch (error) {
+        console.error("Reaction error:", error);
+      }
+    },
+  );
+
+  socket.on("message:delete", async ({ messageId }) => {
+    try {
+      const userId = (socket as any).userId;
+
+      const message = await Message.findById(messageId);
+
+      if (!message) {
+        return;
+      }
+
+      // Sirf sender apna message delete kar sakta hai
+      if (message.sender.toString() !== userId) {
+        return;
+      }
+
+      message.deletedForEveryone = true;
+      message.content = "This message was deleted";
+      message.reactions = [];
+
+      await message.save();
+
+      const updatedMessage = await Message.findById(messageId)
+        .populate("sender", "name avatar")
+        .populate({
+          path: "replyTo",
+          populate: {
+            path: "sender",
+            select: "name avatar",
+          },
+        });
+
+      io.to(message.chatId.toString()).emit(
+        "message:delete_update",
+        updatedMessage,
+      );
     } catch (error) {
-      console.error("Delivery update error:", error);
+      console.error("Message delete error:", error);
     }
   });
 
@@ -143,7 +252,16 @@ io.on("connection", async (socket) => {
 
     if (!stillOnline) {
       await redis.srem("online_users", userId);
-      io.emit("user:offline", { userId });
+
+      await User.findByIdAndUpdate(userId, {
+        status: "offline",
+        lastSeen: new Date(),
+      });
+
+      io.emit("user:offline", {
+        userId,
+        lastSeen: new Date(),
+      });
     }
   });
 });

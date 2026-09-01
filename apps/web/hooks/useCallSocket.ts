@@ -49,14 +49,47 @@ export function useCallSocket({
         messages: [...(old?.messages || []), message],
       }));
 
-      // Receiver tells server that message is delivered
       socketRef.current?.emit("message:delivered", {
         messageId: message._id,
       });
     });
 
+    socketRef.current.on("message:reaction_update", (updatedMessage: any) => {
+      queryClient.setQueryData(
+        ["messages", updatedMessage.chatId],
+        (old: any) => {
+          if (!old) return old;
+
+          return {
+            ...old,
+            messages: old.messages.map((msg: any) =>
+              msg._id === updatedMessage._id ? updatedMessage : msg,
+            ),
+          };
+        },
+      );
+    });
+
+    socketRef.current.on("message:delete_update", (updatedMessage: any) => {
+      queryClient.setQueryData(
+        ["messages", updatedMessage.chatId],
+        (old: any) => {
+          if (!old) return old;
+
+          return {
+            ...old,
+            messages: old.messages.map((msg: any) =>
+              msg._id === updatedMessage._id ? updatedMessage : msg,
+            ),
+          };
+        },
+      );
+    });
+
     return () => {
       socketRef.current?.off("message:receive");
+      socketRef.current?.off("message:reaction_update");
+      socketRef.current?.off("message:delete_update");
     };
   }, [queryClient]);
 
