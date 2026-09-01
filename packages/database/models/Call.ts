@@ -1,4 +1,4 @@
-import mongoose, { Schema, models, model } from "mongoose";
+import mongoose, { Schema } from "mongoose";
 
 const CallSchema = new Schema(
   {
@@ -36,4 +36,4 @@ const CallSchema = new Schema(
   },
 );
 
-export default models.Call || model("Call", CallSchema);
+export default mongoose.models.Call || mongoose.model("Call", CallSchema);

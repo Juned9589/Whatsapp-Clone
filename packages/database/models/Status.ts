@@ -1,4 +1,4 @@
-import mongoose, { Schema, model, models } from "mongoose";
+import mongoose, { Schema } from "mongoose";
 
 const statusSchema = new Schema(
   {
@@ -30,4 +30,4 @@ const statusSchema = new Schema(
   { timestamps: true },
 );
 
-export default models.Status || model("Status", statusSchema);
+export default mongoose.models.Status || mongoose.model("Status", statusSchema);

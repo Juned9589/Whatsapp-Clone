@@ -2,20 +2,17 @@
   "name": "@repo/database",
   "version": "1.0.0",
   "type": "module",
-  "main": "./index.ts",
-  "types": "./index.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
-    ".": "./index.ts",
-    "./db": "./db.ts",
-    "./models/User": "./models/User.ts",
-    "./models/Chat": "./models/Chat.ts",
-    "./models/Message": "./models/Message.ts",
-    "./models/Status": "./models/Status.ts"
+    ".": "./dist/index.js",
+    "./db": "./dist/db.js",
+    "./models/User": "./dist/models/User.js",
+    "./models/Chat": "./dist/models/Chat.js",
+    "./models/Message": "./dist/models/Message.js",
+    "./models/Status": "./dist/models/Status.js"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC"
+    "build": "tsc"
+  }
 }
