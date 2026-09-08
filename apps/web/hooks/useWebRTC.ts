@@ -133,9 +133,16 @@ export function useWebRTC() {
 
   const registerTrackHandler = () => {
     if (!peerConnection.current) return;
+
     peerConnection.current.ontrack = (event) => {
       console.log("Remote stream received", event.streams);
+
       const stream = event.streams[0];
+
+      if (!stream) {
+        console.warn("Remote stream not available");
+        return;
+      }
 
       setRemoteStream(stream);
       remoteStreamRef.current = stream;

@@ -24,6 +24,29 @@ interface UseCallSocketProps {
   callTimeoutRef: React.MutableRefObject<NodeJS.Timeout | null>;
 }
 
+interface CallOfferData {
+  from: string;
+  offer: RTCSessionDescriptionInit;
+  caller?: {
+    id: string;
+    name: string;
+    image?: string;
+  };
+  type: "audio" | "video";
+}
+
+interface CallAnswerData {
+  answer: RTCSessionDescriptionInit;
+}
+
+interface IceCandidateData {
+  candidate: RTCIceCandidateInit;
+}
+
+interface CallEndData {
+  cancelled?: boolean;
+}
+
 export function useCallSocket({
   socketRef,
   playIncoming,
@@ -96,16 +119,20 @@ export function useCallSocket({
   useEffect(() => {
     if (!socketRef.current) return;
 
-    socketRef.current?.on("CALL_OFFER", ({ from, offer, caller, type }) => {
-      playIncoming();
-      setActiveCallType(type);
-      setIncomingCall({
-        from,
-        offer,
-        caller,
-        type,
-      });
-    });
+    socketRef.current.on(
+      "CALL_OFFER",
+      ({ from, offer, caller, type }: CallOfferData) => {
+        playIncoming();
+        setActiveCallType(type);
+
+        setIncomingCall({
+          from,
+          offer,
+          caller,
+          type,
+        });
+      },
+    );
 
     return () => {
       socketRef.current?.off("CALL_OFFER");
@@ -115,10 +142,9 @@ export function useCallSocket({
   useEffect(() => {
     if (!socketRef.current) return;
 
-    socketRef.current.on("CALL_ANSWER", async ({ answer }) => {
+    socketRef.current.on("CALL_ANSWER", async ({ answer }: CallAnswerData) => {
       stopOutgoing();
 
-      //  Clear caller timeout
       if (callTimeoutRef.current) {
         clearTimeout(callTimeoutRef.current);
         callTimeoutRef.current = null;
@@ -126,7 +152,6 @@ export function useCallSocket({
 
       await setRemoteAnswer(answer);
 
-      // Call actually connected now
       setCallStartTime(Date.now());
 
       console.log("Call answered");
@@ -140,13 +165,16 @@ export function useCallSocket({
   useEffect(() => {
     if (!socketRef.current) return;
 
-    socketRef.current.on("ICE_CANDIDATE", async ({ candidate }) => {
-      try {
-        await addIceCandidate(candidate);
-      } catch (error) {
-        console.error("Failed to add ICE candidate:", error);
-      }
-    });
+    socketRef.current.on(
+      "ICE_CANDIDATE",
+      async ({ candidate }: IceCandidateData) => {
+        try {
+          await addIceCandidate(candidate);
+        } catch (error) {
+          console.error("Failed to add ICE candidate:", error);
+        }
+      },
+    );
 
     return () => {
       socketRef.current?.off("ICE_CANDIDATE");
@@ -156,7 +184,7 @@ export function useCallSocket({
   useEffect(() => {
     if (!socketRef.current) return;
 
-    socketRef.current.on("CALL_END", ({ cancelled }) => {
+    socketRef.current.on("CALL_END", ({ cancelled }: CallEndData) => {
       stopIncoming();
       stopOutgoing();
 

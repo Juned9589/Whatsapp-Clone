@@ -7,8 +7,8 @@ import CallControls from "../CallControls";
 
 
 interface CallScreenProps {
-    localVideoRef: React.RefObject<HTMLVideoElement>;
-    remoteVideoRef: React.RefObject<HTMLVideoElement>;
+    localVideoRef: React.RefObject<HTMLVideoElement | null>;
+    remoteVideoRef: React.RefObject<HTMLVideoElement | null>;
     localStream: MediaStream | null
     remoteStream: MediaStream | null
     onEndCall: () => void;

@@ -1,4 +1,4 @@
-import mongoose, { Schema, models, model } from "mongoose";
+import mongoose, { Schema } from "mongoose";
 
 const CallSchema = new Schema(
   {
@@ -7,21 +7,25 @@ const CallSchema = new Schema(
       ref: "User",
       required: true,
     },
+
     receiver: {
       type: Schema.Types.ObjectId,
       ref: "User",
       required: true,
     },
+
     type: {
       type: String,
       enum: ["audio", "video"],
       default: "video",
     },
+
     status: {
       type: String,
       enum: ["answered", "missed", "rejected"],
       default: "answered",
     },
+
     duration: {
       type: Number,
       default: 0,
@@ -30,4 +34,6 @@ const CallSchema = new Schema(
   { timestamps: true },
 );
 
-export default models.Call || model("Call", CallSchema);
+const Call = mongoose.models.Call || mongoose.model("Call", CallSchema);
+
+export default Call;

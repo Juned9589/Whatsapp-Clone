@@ -12,6 +12,13 @@ export async function POST(req: Request) {
       return Response.json({ message: "Unauthorized" }, { status: 401 });
     }
 
+    if (typeof auth === "string" || !auth.userId) {
+      return Response.json(
+        { message: "Invalid authentication token" },
+        { status: 401 },
+      );
+    }
+
     const { receiverId, duration, status, type } = await req.json();
 
     const call = await Call.create({
@@ -40,9 +47,18 @@ export async function GET() {
       return Response.json({ message: "Unauthorized" }, { status: 401 });
     }
 
+    if (!auth.userId) {
+      return Response.json(
+        { message: "Invalid authentication token" },
+        { status: 401 },
+      );
+    }
+
+    const userId = auth.userId;
+
     const calls = await Call.find({
-      $or: [{ caller: auth.userId }, { receiver: auth.userId }],
-    })
+      $or: [{ caller: userId }, { receiver: userId }],
+    } as any)
       .populate("caller", "name image")
       .populate("receiver", "name image")
       .sort({ createdAt: -1 });
